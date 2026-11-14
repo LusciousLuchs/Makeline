@@ -39,6 +39,7 @@ void startShift() {
     G.S.startDay(seed);
     G.tool = -1; G.pickTicket = -1; G.toasts.clear(); G.paused = G.chart = G.help = false;
     screen = PLAY;
+    G.playing = true; G.office = false;
     worldReset();
 }
 
@@ -55,7 +56,8 @@ void events() {
             case E_REVIEW: toast(e.text, e.a); sfx(e.a >= 4 ? SFX_GOOD : SFX_BAD); break;
             case E_OVEN_OUT: sfx(SFX_OVEN); break;
             case E_READY: snprintf(b, sizeof b, "Order #%d is boxed and ready.", e.a); toast(b); sfx(SFX_DING); break;
-            case E_DRIVER: snprintf(b, sizeof b, "A driver left with order #%d.", e.a); toast(b); break;
+            case E_DRIVER: snprintf(b, sizeof b, "%s left on a delivery run.", e.text.c_str()); toast(b); break;
+            case E_NOTE: toast(e.text); break;
             case E_STORMED: toast("A customer gave up and walked out."); sfx(SFX_BAD); break;
             case E_MISSED: toast("Missed a call. They hung up."); sfx(SFX_BAD); break;
             case E_TALK: sfx(SFX_TALK); break;
@@ -186,11 +188,12 @@ void dayEnd() {
     ui::text(b, card.x + 36, card.y + 24, 64, ui::DKRED);
     ui::text("The lights are off. Here's how it went.", card.x + 38, card.y + 96, 21, ui::GREY);
     float y = card.y + 150;
-    auto stat = [&](const char* k, const std::string& v, Color c = INK) { ui::text(k, card.x + 40, y, 26, INK); ui::text(v, card.x + card.width - 40, y, 26, c, 2); y += 44; };
+    auto stat = [&](const char* k, const std::string& v, Color c = INK) { ui::text(k, card.x + 40, y, 24, INK); ui::text(v, card.x + card.width - 40, y, 24, c, 2); y += 36; };
     stat("Orders taken", std::to_string(S.dayOrders));
     stat("Walked out or hung up", std::to_string(S.dayLost), S.dayLost ? ui::DKRED : INK);
     snprintf(b, sizeof b, "$%.2f", S.dayMoney); stat("Sales (after refunds)", b);
     snprintf(b, sizeof b, "$%.2f", S.dayTips); stat("Tips", b);
+    if (S.dayWages > 0) { snprintf(b, sizeof b, "-$%.2f", S.dayWages); stat("Wages", b, ui::DKRED); }
     float sum = 0; for (auto& r : S.dayReviews) sum += r.stars;
     float avg = S.dayReviews.empty() ? 0 : sum / S.dayReviews.size();
     y += 10;
@@ -229,12 +232,18 @@ void dayEnd() {
             S.day++; save(); screen = TITLE;
         }
     }
+    if (ui::button({card.x + 40, card.y + card.height - 164, 480, 50}, "Staff and hiring", ui::YELLOW, verdict != 2, 22)) { G.office = true; G.officeTab = 0; }
     // the reviews, newest first
     Rectangle list{700, 60, 800, 780};
     ui::panel(list, {246, 240, 228, 255}, 16, 5, true);
     ui::text("WHAT THEY WROTE", list.x + 30, list.y + 20, 30, INK);
     reviewScroll = std::max(0.f, reviewScroll - GetMouseWheelMove() * 60);
     float ry = list.y + 76 - reviewScroll, bottom = list.y + list.height - 16;
+    for (auto& n : S.dayNotes) {   // what the crew got up to
+        if (ry >= list.y + 66 && ry + 30 <= bottom) { DrawCircleV({list.x + 36, ry + 12}, 5, ui::BLUE); ui::text(n, list.x + 52, ry, 19, INK); }
+        ry += 30;
+    }
+    if (!S.dayNotes.empty()) ry += 10;
     if (S.dayReviews.empty()) ui::text("No reviews today.", list.x + 30, ry, 22, ui::GREY);
     for (size_t i = S.dayReviews.size(); i-- > 0;) {
         auto& r = S.dayReviews[i];
@@ -273,12 +282,14 @@ void play(float dt) {
     if (IsKeyPressed(KEY_ESCAPE)) {
         if (G.help) G.help = false;
         else if (G.chart) G.chart = false;
+        else if (G.office) { G.office = false; setMode(G.mode); }
         else if (G.paused) { G.paused = false; setMode(G.mode); }
         else if (G.mode != M_WALK) setMode(M_WALK);
         else { G.paused = true; if (!shotMode) EnableCursor(); }
     }
     if (!G.paused) {
         if (IsKeyPressed(KEY_TAB) && G.mode == M_MAKE) G.chart = !G.chart;
+        if (IsKeyPressed(KEY_M)) { G.office = !G.office; if (G.office) { if (!shotMode) EnableCursor(); } else setMode(G.mode); }
         S.update(dt);
         events();
         for (auto& t : G.toasts) t.age += dt;
@@ -290,7 +301,7 @@ void play(float dt) {
     ClearBackground({30, 24, 22, 255});
     worldDraw();
     BeginMode2D(Camera2D{ui::offset, {0, 0}, 0, ui::scale});
-    bool block = G.paused || G.chart;
+    bool block = G.paused || G.chart || G.office;
     Vector2 keepM = ui::M; bool kp = ui::pressed, kd = ui::down;
     if (block) { ui::pressed = ui::down = false; ui::M = {-999, -999}; }   // nothing underneath takes clicks
     worldHud();
@@ -299,13 +310,14 @@ void play(float dt) {
     drawToasts();
     ui::M = keepM; ui::pressed = kp; ui::down = kd;
     if (G.chart && !G.paused) portionChart();
+    if (G.office && !G.paused) officeOverlay();
     if (G.paused) pauseMenu();
-    if (S.dayOver && !G.paused) { reviewScroll = 0; verdict = S.closeDay(); save(); screen = DAYEND; sfx(verdict ? SFX_BAD : SFX_DOOR); if (!shotMode) EnableCursor(); }
+    if (S.dayOver && !G.paused) { reviewScroll = 0; G.playing = false; G.office = false; verdict = S.closeDay(); save(); screen = DAYEND; sfx(verdict ? SFX_BAD : SFX_DOOR); if (!shotMode) EnableCursor(); }
 }
 }  // namespace
 
 int main(int argc, char** argv) {
-    const char* shot = nullptr, *at = nullptr; int frames = 40, station = -1; float warm = 0, care = 1; bool demo = false;
+    const char* shot = nullptr, *at = nullptr; int frames = 40, station = -1, hireN = 0; float warm = 0, care = 1; bool demo = false;
     std::string show;
     seed = (uint64_t)time(nullptr);
     for (int i = 1; i < argc; i++) {
@@ -319,6 +331,7 @@ int main(int argc, char** argv) {
         else if (arg("--seed")) seed = (uint64_t)atoll(argv[++i]);
         else if (arg("--screen")) show = argv[++i];
         else if (arg("--at")) at = argv[++i];
+        else if (arg("--hire")) hireN = atoi(argv[++i]);
         else if (arg("--script")) ui::script(argv[++i]);
         else if (!strcmp(argv[i], "--demo")) demo = true;
         else if (!strcmp(argv[i], "--noguides")) G.S.guides = false;
@@ -374,6 +387,8 @@ int main(int argc, char** argv) {
             if (station >= 0) setMode(station);
             if (at) sscanf(at, "%f,%f,%f,%f", &G.px, &G.pz, &G.yaw, &G.pitch);
             if (show == "chart") G.chart = true;
+            if (show.rfind("office", 0) == 0) { G.office = true; G.officeTab = show.size() > 6 ? show[6] - '0' : 0; }
+            if (hireN) { Store& S = G.S; S.applicants.clear(); S.newApplicants(); for (int i = 0; i < hireN && !S.applicants.empty(); i++) S.hire(0); }
             if (show == "pause") G.paused = true;
             if (show == "help") G.help = G.paused = true;
             if (show == "dayend") { while (!G.S.dayOver) { G.S.update(1 / 30.f); botStep(G.S, 1 / 30.f, care, br); } G.S.events.clear(); verdict = G.S.closeDay(); screen = DAYEND; }
@@ -396,7 +411,7 @@ int main(int argc, char** argv) {
             if (splashT > 2.6f || ui::pressed || GetKeyPressed()) screen = TITLE;
         } else if (screen == TITLE) titleScreen();
         else if (screen == PLAY) play(dt);
-        else dayEnd();
+        else { dayEnd(); if (G.office) { if (IsKeyPressed(KEY_ESCAPE)) G.office = false; else officeOverlay(); } }
         EndMode2D();
         EndDrawing();
         if (shotMode && ++frame >= frames) {

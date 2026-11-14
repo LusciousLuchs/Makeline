@@ -1,0 +1,49 @@
+# Makeline: read this first
+
+A first-person 3D game about managing a fast-food pizza place, for OAB Foundry. **DESIGN.md is the design**: keep it
+up to date when the owner adds to it. "Makeline" is a working title.
+
+## Working with the owner
+
+- The owner is the **game designer, not a software engineer**, and worked five years at a pizza chain: the game has
+  to feel right to someone who has run a makeline. Talk in game terms, keep replies short, make the technical
+  decisions yourself, only ask about real design choices.
+- Measure before claiming something works (the tests play whole shifts; take screenshots).
+- At the end of a piece of work: commit, push, and send a **Windows build zip** plus screenshots where they help.
+- Built-in content stays original: no real chain's names, logos or menu item names.
+- Privacy: nothing personal from the owner into the repository, commits or release notes.
+
+## The owner's rules so far
+
+- Mistakes must be possible everywhere: nothing is "press F to do the job".
+- Customers are impatient and rude. Orders have a timer: over 20 minutes late, 30 very late, 45 extreme.
+- Portions per size; too little or too much makes customers angry.
+- The store's review score under 3.0 at closing is a reprimand; 3 reprimands inside 7 days and you're fired.
+- Staff can be hired, make mistakes, can be written up, and quit when unhappy (drivers with no tips, customer
+  service that gets yelled at). People vary in age, sex, ethnic background, names and looks.
+- Deliveries: up to 10 miles, time from the route and its speed limits, extra time per stop, a road map generated
+  for the shift.
+- 3D, not 2D. raylib and OpenGL. Its own GitHub repository, self-updating.
+
+## Technical notes
+
+- C++17, CMake, raylib 5.5 compiled from `third_party`. Layers: `src/core` (rules, no graphics, tested) ->
+  `src/game` (everything drawn). See README "Source layout".
+- Tests: `cmake -S . -B build && cmake --build build -j && ./build/makeline_tests` (`MAKELINE_TESTDBG=1` prints
+  each review's reasons).
+- Native Linux game for screenshots: `-DMAKELINE_NATIVE_APP=ON`, run under `xvfb-run` with
+  `LIBGL_ALWAYS_SOFTWARE=1`. Flags (src/game/main.cpp): `--shot file.png --frames N`, `--day`, `--seed`,
+  `--warm secs` (a bot plays that long first, `--care 0..1`), `--demo` (something at every station),
+  `--station 1|2|3` (register, makeline, cut table), `--at x,z,yaw,pitch`, `--hire N`,
+  `--screen title|chart|pause|help|dayend|office0|office1|office2`, `--script "frame:x,y;frame:x,y>x2,y2"`
+  (clicks and drags on the 1600x900 canvas).
+- The UI is drawn on a 1600x900 canvas scaled onto the window (`ui::scale/offset`); 3D fills the window behind it.
+- Stations have a `g3::Frame` (local x = screen right, local z = toward the player); the mouse is put onto the
+  table with `mouseOnPlane` and `Frame::local`. Pizza units: (0,0) the middle, 1 the crust's edge.
+- Time: `SEC_PER_MIN` (6 real seconds a clock minute), `SHIFT_LEN` 90 clock minutes.
+- Shipping: bump the version in CMakeLists.txt and push to `main`; `.github/workflows/release.yml` builds the
+  Windows zip and publishes a release. The game's updater (`src/game/updater.hpp`, `update::REPO`) reads the
+  newest release of that repository. Keep CHANGELOG.md's newest section short and in game terms (it becomes the
+  release notes).
+- The embedded logo and font: `tools/embed_assets.py` -> `src/game/assets.inc`.
+- Sounds are synthesised placeholders (`src/game/audio.cpp`).

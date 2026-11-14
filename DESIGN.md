@@ -34,7 +34,7 @@ It's built from five years on a real makeline: the point is that it feels right 
 
 ### A shift
 
-One day is one evening shift, 4 PM to 10 PM, about 7 minutes of play, with a dinner rush in the middle. After
+One day is the dinner rush, 5:00 to 6:30 PM, about 9 minutes of play. After
 closing you finish what's still in the store, then get the day's report: orders, walk-outs, sales, tips, every
 review with what went wrong, and corporate's verdict.
 
@@ -86,8 +86,51 @@ You walk around behind the counter. Each station is a place in the store:
 ### Handing over
 
 - Counter and carryout customers wait in the lobby: hand them their order.
-- Deliveries leave with a driver (two drivers; they take time to get back).
+- Deliveries leave with a driver (see Delivery).
 - Entering carryout when they said delivery (or the reverse) means they never get their pizza.
+
+## The order timer
+
+Every order has a timer from the moment it's rung up, shown on its ticket, on the order screen and over the
+customer's head. The store runs on the same times a real one does:
+
+| Timer when the customer gets it | Counts as |
+|---|---|
+| Over 20 minutes | Late |
+| Over 30 minutes | Very late |
+| Over 45 minutes | Extreme: one star, whatever the pizza was like |
+
+A shift is the dinner rush, 5:00 to 6:30 on the shop clock (one clock minute is six seconds of play).
+
+## Staff
+
+You're the manager: you can do every job yourself, or hire people to do them.
+
+- **Customer service** take orders at the counter and on the phone, and hand finished orders over.
+- **Makeline** make the pizzas, and cut and box what comes out of the oven.
+- **Drivers** deliver. The store starts with one.
+- New applications land on your desk every morning. Each person has an age, a look, a wage they want, and a
+  skill you only get a hint of at the interview. Good people cost more.
+- **Staff make mistakes**, by skill: orders rung up wrong, portions off, a topping forgotten, a sloppy cut. Their
+  mistakes land on the store's score like yours do, and the day's report names who did what.
+- **Write-ups:** you can write someone up. They're more careful for a couple of days and less happy for longer.
+  Writing someone up who did nothing wrong costs twice the goodwill.
+- **Happiness:** unhappy staff do worse work, and anyone miserable at closing quits.
+  - Drivers who make no tips get unhappy. Tips come from on-time, correct deliveries.
+  - Customer service hate being yelled at: every rude or fed-up customer they serve wears them down.
+  - Makeline get worn down by being slammed all night.
+- Wages come out of the till every night.
+- Customers and staff vary in age, sex, ethnic background, names and looks.
+
+## Delivery
+
+- A **road map of the delivery area is generated fresh every shift**: the store in the middle, addresses up to
+  10 miles out. Main roads are 45 mph; residential streets are 25 to 35 and some don't go through.
+- When a delivery is boxed, a driver who's in the store takes it, with up to two more that are ready.
+- The run goes nearest door first. Drive time comes from the real route and its speed limits, each door adds a
+  couple of minutes, and the driver has to drive back before they can take another run.
+- Better drivers are quicker. The order timer keeps running until the pizza is at the door.
+- The manager's office shows the map live: every waiting door, every driver on the road.
 
 ## Reviews
 
@@ -95,10 +138,10 @@ Every finished or failed order is judged against what the customer **actually** 
 
 | What went wrong | How bad |
 |---|---|
-| Never served, nobody answered, pickup/delivery mixed up | Worst |
+| Never served, nobody answered, pickup/delivery mixed up, over 45 minutes | Worst |
 | A whole pizza missing; wrong size; wrong sauce; a topping missing; a topping they didn't order | Serious |
-| Wrong crust; very slow | Serious |
-| Too little or too much of something; not cut; cold; slow; topping over the wrong half | Moderate |
+| Wrong crust; very late (over 30 minutes) | Serious |
+| Too little or too much of something; not cut; cold; late (over 20 minutes); topping over the wrong half | Moderate |
 | Sauce or toppings not spread; sloppy or wrong kind of cut; lukewarm | Minor |
 
 - One minor slip still gets five stars. Problems add up to 4, 3, 2 or 1 star.
@@ -119,11 +162,11 @@ Every finished or failed order is judged against what the customer **actually** 
 - `src/game`: the 3D store, stations, screens, sound, updater.
 - **Its own GitHub repository**, with releases published automatically when the version goes up.
 - **Self-updating:** the game checks the repository's newest release at start, downloads and installs it.
-- One save: day, money, reviews, reprimands.
+- One save: day, money, reviews, reprimands, staff.
 
 ## Later
 
-- Staff to hire and schedule (you are the manager): insiders, makeline, drivers, each with skill and flaws.
+- Scheduling staff by day, raises, praise, training.
 - Sides and drinks, coupons, "the customer says their last order was wrong".
 - Stock and prep: running out of cheese mid-rush, dough proofing.
 - Inspections, a store you can upgrade, more stores.

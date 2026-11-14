@@ -1,0 +1,71 @@
+# Publishes a downloadable Windows build whenever the game's version goes up on main.
+# Bump the version in CMakeLists.txt (project(Makeline VERSION x.y.z)) and push: this runs the tests, builds the
+# Windows zip and puts it on this repository's Releases page, with the newest section of CHANGELOG.md as its notes.
+# A version that already has a release is skipped. The game's updater downloads the newest release.
+name: release
+
+on:
+  push:
+    branches: [main]
+    paths: [CMakeLists.txt, .github/workflows/release.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  windows-zip:
+    # only in the game's own repository
+    if: github.event.repository.name != 'Project-Gunsmith-3D'
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Which version
+        id: v
+        run: |
+          v=$(sed -n 's/^project(Makeline VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+          stage=$(sed -n 's/^set(MAKELINE_STAGE "\([a-z]*\)".*/\1/p' CMakeLists.txt)
+          full="$v${stage:+-$stage}"
+          echo "full=$full" >> "$GITHUB_OUTPUT"
+          if gh release view "v$full" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "v$full is already released: nothing to do."
+            echo "skip=1" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Tests (the rules, on Linux)
+        if: steps.v.outputs.skip != '1'
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build -j
+          ./build/makeline_tests
+
+      - name: Windows build (MinGW-w64)
+        if: steps.v.outputs.skip != '1'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q g++-mingw-w64-x86-64-posix
+          cmake -S . -B build-win -DCMAKE_TOOLCHAIN_FILE=cmake/mingw-gcc.cmake -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-win -j --target makeline
+
+      - name: Zip
+        if: steps.v.outputs.skip != '1'
+        run: |
+          d="Makeline-${{ steps.v.outputs.full }}"
+          mkdir "$d"
+          cp build-win/makeline.exe README.md CHANGELOG.md "$d"/
+          cp -r licenses "$d"/
+          zip -qr "$d.zip" "$d"
+          awk '/^## /{n++} n==1' CHANGELOG.md | tail -n +2 > notes.md
+
+      - name: Publish the release
+        if: steps.v.outputs.skip != '1'
+        run: |
+          gh release create "v${{ steps.v.outputs.full }}" "Makeline-${{ steps.v.outputs.full }}.zip" \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Makeline ${{ steps.v.outputs.full }}" --notes-file notes.md --latest

@@ -2,6 +2,7 @@
 #include "talk.hpp"
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 
 namespace pz {
 namespace {
@@ -33,11 +34,28 @@ std::string saySize(Rng& r, int size, bool inches) {
 }  // namespace
 
 Person makePerson(Rng& rng) {
-    static const char* const FIRST[] = {"Brenda", "Gary", "Linda", "Todd", "Sharon", "Rick", "Tammy", "Doug", "Carol", "Kyle", "Deb", "Randy",
-        "Pam", "Chad", "Karen", "Bruce", "Trish", "Earl", "Stacy", "Dale", "Rhonda", "Vince", "Marge", "Travis", "Donna", "Curtis", "Janice",
-        "Brett", "Lorraine", "Wayne", "Tiffany", "Hank", "Gloria", "Derek", "Nadine", "Lou", "Crystal", "Marty", "Bev", "Scott"};
+    // first names by background and sex (men, then women), so the town looks like a town
+    static const char* const NAMES[6][2][8] = {
+        {{"Gary", "Todd", "Rick", "Doug", "Kyle", "Bruce", "Earl", "Dale"}, {"Brenda", "Linda", "Sharon", "Tammy", "Carol", "Karen", "Deb", "Marge"}},
+        {{"Luis", "Miguel", "Javier", "Carlos", "Hector", "Diego", "Rafael", "Mateo"}, {"Maria", "Rosa", "Carmen", "Lucia", "Elena", "Sofia", "Isabel", "Ana"}},
+        {{"Darnell", "Marcus", "Andre", "Tyrone", "Jamal", "Reggie", "Curtis", "Malik"}, {"Latoya", "Keisha", "Denise", "Monique", "Tanya", "Jasmine", "Ebony", "Renee"}},
+        {{"Wei", "Kenji", "Minh", "Jun", "Hiro", "Tuan", "Sung", "Bao"}, {"Mei", "Yuki", "Linh", "Hana", "Ji-woo", "Lan", "Xiu", "Aiko"}},
+        {{"Raj", "Arjun", "Vikram", "Sanjay", "Imran", "Anil", "Deepak", "Nikhil"}, {"Priya", "Anita", "Sunita", "Divya", "Meera", "Kavita", "Nisha", "Asha"}},
+        {{"Omar", "Yusuf", "Karim", "Tariq", "Samir", "Hassan", "Nabil", "Farid"}, {"Layla", "Fatima", "Amira", "Yasmin", "Noor", "Salma", "Dalia", "Rania"}}};
+    static const int SKIN_LO[6] = {0, 1, 3, 0, 2, 1}, SKIN_HI[6] = {1, 3, 5, 2, 4, 3};
     Person p;
-    p.name = std::string(pick(rng, FIRST)) + " " + (char)('A' + rng.below(26)) + ".";
+    float f = rng.f();
+    int bg = f < 0.42f ? 0 : f < 0.6f ? 1 : f < 0.76f ? 2 : f < 0.86f ? 3 : f < 0.94f ? 4 : 5;
+    p.sex = rng.below(2);
+    p.age = 17 + (int)(std::pow(rng.f(), 1.4f) * 62);
+    p.name = std::string(NAMES[bg][p.sex][rng.below(8)]) + " " + (char)('A' + rng.below(26)) + ".";
+    p.skin = SKIN_LO[bg] + rng.below(SKIN_HI[bg] - SKIN_LO[bg] + 1);
+    p.hair = bg == 0 ? rng.below(4) : bg == 1 ? rng.below(2) : 1;
+    if (p.age > 68) p.hair = 5;
+    else if (p.age > 52 && rng.chance(0.7f)) p.hair = 4;
+    f = rng.f();
+    if (p.sex == 0) p.hairStyle = (p.age > 45 && f < 0.3f) ? 0 : f < 0.75f ? 1 : f < 0.9f ? 4 : 3;
+    else p.hairStyle = f < 0.45f ? 3 : f < 0.75f ? 2 : f < 0.95f ? 1 : 4;
     p.look = rng.next();
     p.mood = rng.below(4);
     return p;
@@ -284,8 +302,9 @@ std::string issueLine(const Issue& is) {
         case WRONG_CUT: return "Wrong kind of cut";
         case LUKEWARM: return "Lukewarm";
         case COLD: return "Cold";
-        case LATE: return "Slow";
-        case VERY_LATE: return "Very slow";
+        case LATE: return "Late (over 20 minutes)";
+        case VERY_LATE: return "Very late (over 30 minutes)";
+        case EXTREMELY_LATE: return "Extremely late (over 45 minutes)";
         case WRONG_SERVICE: return "Pickup/delivery mixed up";
         case MISSING_PIZZA: return "A pizza was missing";
         case EXTRA_PIZZA: return "Charged for an extra pizza";
@@ -331,7 +350,8 @@ std::string reviewText(Rng& r, const Score& score, int stars) {
             case LUKEWARM: s = "Lukewarm by the time I got it."; break;
             case COLD: s = "Stone cold. Sat around forever."; break;
             case LATE: s = r.chance(0.5f) ? "Took way too long." : "Slow. Very slow."; break;
-            case VERY_LATE: s = "I aged a year waiting for this pizza."; break;
+            case VERY_LATE: s = r.chance(0.5f) ? "Over half an hour for a pizza. Half an HOUR." : "I aged a year waiting for this pizza."; break;
+            case EXTREMELY_LATE: s = "Forty-five minutes. I could have driven to Italy."; break;
             case WRONG_SERVICE: s = "I said pickup and they sent a driver. Or the other way. Either way I had no pizza."; break;
             case MISSING_PIZZA: s = "They shorted me a whole pizza."; break;
             case EXTRA_PIZZA: s = "Charged me for a pizza I didn't order."; break;

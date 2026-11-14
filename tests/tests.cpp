@@ -62,10 +62,13 @@ int main() {
         // an order: the right pizzas in any order, one missing, service mixed up
         Spec a, b; b.size = SMALL; b.sauce = BBQ;
         Pizza pa = perfectPizza(a, rng), pb = perfectPizza(b, rng);
-        CHECK(scoreOrder({a, b}, {&pb, &pa}, COUNTER, COUNTER, 0.5f).stars == 5);
-        CHECK(scoreOrder({a, b}, {&pa}, COUNTER, COUNTER, 0.5f).stars <= 3);
-        CHECK(scoreOrder({a}, {&pa}, DELIVERY, CARRYOUT, 0.5f).stars <= 2);
-        CHECK(scoreOrder({a}, {&pa}, COUNTER, COUNTER, 1.2f).stars == 4);
+        CHECK(scoreOrder({a, b}, {&pb, &pa}, COUNTER, COUNTER, 12).stars == 5);
+        CHECK(scoreOrder({a, b}, {&pa}, COUNTER, COUNTER, 12).stars <= 3);
+        CHECK(scoreOrder({a}, {&pa}, DELIVERY, CARRYOUT, 12).stars <= 2);
+        CHECK(scoreOrder({a}, {&pa}, COUNTER, COUNTER, 19).stars == 5);   // the order timer: 20 late, 30 very late, 45 extreme
+        CHECK(scoreOrder({a}, {&pa}, COUNTER, COUNTER, 21).stars == 4);
+        CHECK(scoreOrder({a}, {&pa}, COUNTER, COUNTER, 31).stars == 3);
+        CHECK(scoreOrder({a}, {&pa}, COUNTER, COUNTER, 46).stars == 1);
     }
     // whole shifts: a careful bot keeps the shop well reviewed, a careless one sinks it
     for (int pass = 0; pass < 2; pass++) {
@@ -74,7 +77,7 @@ int main() {
         for (int day = 1; day <= 4; day++) {
             Store s; s.day = day; s.startDay(100 + day);
             Rng br(day);
-            for (int i = 0; i < 60 * 800 && !s.dayOver; i++) { s.update(1 / 60.f); botStep(s, 1 / 60.f, care, br); }
+            for (int i = 0; i < 60 * 1000 && !s.dayOver; i++) { s.update(1 / 60.f); botStep(s, 1 / 60.f, care, br); }
             CHECK(s.dayOver);
             for (auto& r : s.dayReviews) { sum += r.stars; n++; if (pass == 0 && getenv("MAKELINE_TESTDBG")) { printf("  day %d %d*:", day, r.stars); for (auto& x : r.reasons) printf(" [%s]", x.c_str()); printf("\n"); } }
             orders += s.dayOrders; lost += s.dayLost;
@@ -84,7 +87,7 @@ int main() {
         float avg = n ? sum / n : 0;
         printf("bot care %.1f: %d orders, %d walked out, %d reviews, average %.2f stars\n", care, orders, lost, n, avg);
         CHECK(orders >= 20);
-        if (pass == 0) CHECK(avg > 4.0f); else CHECK(avg < 3.0f);
+        if (pass == 0) CHECK(avg > 3.5f); else CHECK(avg < 2.5f);   // (alone, with one driver: late orders are part of life)
     }
     {   // reprimands: a bad score at closing is one; three inside a week and you're fired; old ones stop counting
         Store s;
@@ -99,6 +102,44 @@ int main() {
         CHECK(s.fired);
         Store t2; CHECK(t2.fromJson(s.toJson())); CHECK(t2.fired && t2.reprimands.size() == s.reprimands.size());
         Store q; q.day = 3; CHECK(q.closeDay() == 0);   // nobody reviewed: nothing to judge
+    }
+    {   // the roads: every crossing can be reached, further is slower, and no two shifts get the same map
+        Rng r1(3), r2(4);
+        RoadMap a, b; a.generate(r1); b.generate(r2);
+        int diff = 0;
+        for (int k = 0; k < RoadMap::N * RoadMap::N; k++) { CHECK(a.minutes(a.store(), k) < 60); if (a.right[k] != b.right[k]) diff++; }
+        CHECK(diff > 20);
+        CHECK(a.minutes(a.store(), 0) > a.minutes(a.store(), a.store() + 2));
+        for (int i = 0; i < 200; i++) { int n = a.randomAddress(r1); CHECK(a.miles(n) <= 10 && n != a.store()); }
+    }
+    {   // a crew runs the shop without you: a good one keeps the score up, a bad one doesn't, and its mistakes are noted
+        float avg[2];
+        for (int pass = 0; pass < 2; pass++) {
+            Store s; s.startDay(77);
+            float skill = pass == 0 ? 0.97f : 0.25f;
+            for (int role : {CSR, CSR, COOK, COOK, DRIVER}) { Worker w; Rng r(role + 5); w.who = makePerson(r); w.role = role; w.skill = skill; s.staff.push_back(w); }
+            for (int i = 0; i < 60 * 1000 && !s.dayOver; i++) s.update(1 / 60.f);
+            if (getenv("MAKELINE_TESTDBG")) for (auto& r : s.dayReviews) { printf("  crew %d*:", r.stars); for (auto& x : r.reasons) printf(" [%s]", x.c_str()); printf("\n"); }
+            CHECK(s.dayOver);
+            float sum = 0; for (auto& r : s.dayReviews) sum += r.stars;
+            avg[pass] = s.dayReviews.empty() ? 0 : sum / s.dayReviews.size();
+            int mistakes = 0; for (auto& w : s.staff) mistakes += w.mistakes;
+            printf("crew skill %.2f: %d orders, %d reviews, average %.2f stars, %d staff mistakes\n", skill, s.dayOrders, (int)s.dayReviews.size(), avg[pass], mistakes);
+            if (pass == 1) CHECK(mistakes > 0);
+            // a write-up for nothing costs more goodwill than one that was earned; miserable staff quit at closing
+            Store q; q.startDay(1);
+            Worker w; Rng r(9); w.who = makePerson(r); w.role = CSR; w.mood = 0.5f; q.staff.push_back(w); q.staff.push_back(w);
+            q.staff[1].mistakes = 1; q.staff[2].mistakes = 0;
+            q.writeUp(1); q.writeUp(2);
+            CHECK(q.staff[2].mood < q.staff[1].mood);
+            q.staff[2].mood = 0.05f;
+            size_t before = q.staff.size();
+            q.closeDay();
+            CHECK(q.staff.size() == before - 1);
+            Store l; CHECK(l.fromJson(q.toJson())); CHECK(l.staff.size() == q.staff.size());
+        }
+        CHECK(avg[0] > avg[1] + 1);
+        CHECK(avg[0] > 3.5f);
     }
     {   // a script always names every topping somewhere (or loses one to static)
         for (int k = 0; k < 300; k++) {

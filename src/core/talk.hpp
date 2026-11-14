@@ -8,8 +8,11 @@ namespace pz {
 
 struct Person {
     std::string name;
-    uint32_t look = 0;    // seeds their face and clothes
+    uint32_t look = 0;    // seeds their clothes and build
     int mood = 0;         // 0 in a hurry, 1 mumbler, 2 can't decide, 3 entitled
+    int age = 35, sex = 0;                    // sex 0 a man, 1 a woman
+    int skin = 0;                             // 0 lightest .. 5 darkest
+    int hair = 0, hairStyle = 1;              // colour: 0 brown, 1 black, 2 blond, 3 red, 4 grey, 5 white; style: 0 bald, 1 short, 2 bun, 3 long, 4 cap
 };
 Person makePerson(Rng& rng);
 Spec randomPizza(Rng& rng, int day);

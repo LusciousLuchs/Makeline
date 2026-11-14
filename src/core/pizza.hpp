@@ -53,7 +53,7 @@ enum IssueCode {
     WRONG_SIZE, WRONG_CRUST, WRONG_SAUCE, NO_SAUCE, SAUCE_LOW, SAUCE_HIGH, SAUCE_PATCHY,
     MISSING, TOO_LITTLE, TOO_MUCH, UNEVEN, UNWANTED, WRONG_HALF,
     UNCUT, BAD_CUT, WRONG_CUT, LUKEWARM, COLD,
-    LATE, VERY_LATE, WRONG_SERVICE, MISSING_PIZZA, EXTRA_PIZZA, NEVER_SERVED, NO_ANSWER, RUDE_SERVICE,
+    LATE, VERY_LATE, EXTREMELY_LATE, WRONG_SERVICE, MISSING_PIZZA, EXTRA_PIZZA, NEVER_SERVED, NO_ANSWER, RUDE_SERVICE,
     ISSUE_N
 };
 struct Issue { int code; int ing; float pts; };
@@ -68,7 +68,9 @@ Score scorePizza(const Spec& want, const Pizza& made);
 int cutStyle(const Pizza& p);
 // a whole order: the pizzas made against the pizzas wanted (best pairing), plus the service
 struct OrderScore { Score score; int stars = 5; };
-OrderScore scoreOrder(const std::vector<Spec>& want, const std::vector<const Pizza*>& made, int wantService, int gotService, float waitRatio);
+// `minutes`: the order's timer when the customer got it. Over 20 is late, over 30 very late, over 45 extreme.
+constexpr float LATE_MIN = 20, VERY_LATE_MIN = 30, EXTREME_MIN = 45;
+OrderScore scoreOrder(const std::vector<Spec>& want, const std::vector<const Pizza*>& made, int wantService, int gotService, float minutes);
 int starsFor(float penalty);
 
 // a pizza made exactly right (the tests' yardstick, and the demo's)

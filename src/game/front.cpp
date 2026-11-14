@@ -78,7 +78,9 @@ void pos() {
             std::string st = o.out ? "On the road" : o.ready ? (o.service == DELIVERY ? "Waiting for a driver" : (c && c->state == C_WAITING ? "READY - hand it over!" : "Ready, on the heat rack")) :
                 std::to_string(boxed) + " of " + std::to_string(o.tickets.size()) + " boxed";
             ui::text(std::string(svc) + "  -  " + st, row.x + 10, row.y + 27, 18, o.ready ? ui::shade(ui::GREEN, 0.6f) : ui::GREY);
-            float left = 1 - (float)((S.t - o.placed) / o.budget);
+            float mins = o.minutes(S.t), left = 1 - mins / VERY_LATE_MIN;
+            char tm[16]; snprintf(tm, sizeof tm, "%d:%02d", (int)mins, (int)(mins * 60) % 60);
+            ui::text(tm, row.x + w - 140, row.y + 10, 24, mins >= LATE_MIN ? ui::DKRED : mins >= 15 ? Color{190, 130, 30, 255} : INK, 2);
             DrawRectangleRounded({row.x + w - 130, row.y + 18, 120, 12}, 1, 4, INK);
             DrawRectangleRounded({row.x + w - 128, row.y + 20, std::max(4.f, 116 * std::clamp(left, 0.f, 1.f)), 8}, 1, 4, left > 0.5f ? ui::GREEN : left > 0.25f ? ui::YELLOW : ui::RED);
             y += 58;

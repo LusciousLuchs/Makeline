@@ -37,6 +37,8 @@ struct Game {
     Vector2 cutFrom{0, 0};
     std::vector<Toast> toasts;
     bool paused = false, help = false;
+    bool office = false; int officeTab = 0;   // the manager's office (staff, hiring, the delivery map)
+    bool playing = false;                     // a shift is on (not the end-of-day report)
 };
 extern Game G;
 extern bool gShotMode;
@@ -68,3 +70,4 @@ void registerOverlay();
 void makeOverlay();
 void cutOverlay();
 void portionChart();
+void officeOverlay();

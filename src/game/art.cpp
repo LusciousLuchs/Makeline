@@ -140,6 +140,12 @@ void drawTicket(const Ticket& k, const Order* o, Rectangle r, bool selected, flo
     snprintf(b, sizeof b, "#%d  %d/%d", k.order, k.idx, k.of);
     ui::text(b, r.x + 8, r.y + size * 0.22f, size * 1.05f, INK);
     ui::text(!o ? "" : o->service == DELIVERY ? "DELIVERY" : o->service == CARRYOUT ? "CARRYOUT" : "COUNTER", r.x + r.width - 8, r.y + size * 0.32f, size * 0.8f, INK, 2);
+    if (o) {   // the order's timer: 20 minutes is late
+        float mins = o->minutes(G.S.t);
+        char tm[16]; snprintf(tm, sizeof tm, "%d:%02d", (int)mins, (int)(mins * 60) % 60);
+        Color tc = mins >= pz::LATE_MIN ? ui::RED : mins >= 15 ? Color{190, 130, 30, 255} : ui::GREY;
+        ui::text(tm, r.x + r.width - 8, r.y + size * 1.75f, size * 1.15f, tc, 2);
+    }
     float y = r.y + size * 1.75f, x = r.x + 8, lh = size * 1.2f;
     ui::text(std::string(sizeName(k.spec.size)) + " " + sizeInches(k.spec.size), x, y, size * 1.15f, INK); y += lh * 1.15f;
     ui::text(crustName(k.spec.crust), x, y, size, k.spec.crust == HAND ? INK : ui::DKRED); y += lh;

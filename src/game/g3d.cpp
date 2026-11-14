@@ -272,13 +272,14 @@ void binFill(int ing, const Frame& f, float lx, float lz, float size) {
 
 void person(const Person& who, Vector3 feet, float yaw, float anger, float walk) {
     uint32_t L = who.look;
-    static const Color SKIN[] = {{250, 220, 190, 255}, {238, 196, 160, 255}, {210, 160, 120, 255}, {160, 110, 80, 255}, {110, 76, 56, 255}};
+    static const Color SKIN[] = {{252, 226, 200, 255}, {242, 204, 170, 255}, {222, 174, 132, 255}, {188, 134, 96, 255}, {146, 100, 72, 255}, {100, 68, 50, 255}};
     static const Color SHIRT[] = {{86, 134, 190, 255}, {92, 158, 92, 255}, {214, 120, 60, 255}, {150, 100, 170, 255}, {200, 80, 90, 255}, {90, 90, 100, 255}, {230, 200, 90, 255}, {70, 150, 150, 255}};
-    static const Color HAIR[] = {{60, 40, 30, 255}, {30, 26, 28, 255}, {190, 150, 80, 255}, {150, 70, 40, 255}, {200, 200, 200, 255}};
+    static const Color HAIR[] = {{84, 56, 38, 255}, {30, 26, 28, 255}, {206, 168, 96, 255}, {160, 76, 42, 255}, {150, 150, 152, 255}, {232, 232, 228, 255}};
     static const Color PANTS[] = {{60, 70, 100, 255}, {70, 64, 58, 255}, {40, 44, 52, 255}, {120, 104, 80, 255}};
-    Color skin = ui::mix(SKIN[L % 5], {226, 80, 60, 255}, anger * 0.5f), shirt = SHIRT[(L >> 3) % 8], hair = HAIR[(L >> 9) % 5], pants = PANTS[(L >> 16) % 4];
-    int style = (L >> 6) % 5;
-    float wide = 1.0f + ((L >> 12) % 4) * 0.07f, tall = 0.94f + ((L >> 18) % 5) * 0.03f;
+    Color skin = ui::mix(SKIN[std::clamp(who.skin, 0, 5)], {226, 80, 60, 255}, std::max(0.f, anger) * 0.5f), shirt = SHIRT[(L >> 3) % 8], hair = HAIR[std::clamp(who.hair, 0, 5)], pants = PANTS[(L >> 16) % 4];
+    int style = who.hairStyle;
+    if (anger < 0) { shirt = {206, 60, 46, 255}; pants = {40, 40, 46, 255}; style = 4; anger = 0; }   // staff: the uniform and the visor
+    float wide = 1.0f + ((L >> 12) % 4) * 0.07f - who.sex * 0.08f, tall = 0.95f + ((L >> 18) % 5) * 0.025f - who.sex * 0.05f - (who.age > 65 ? 0.04f : 0);
     float t = ui::time, swing = std::sin(walk * 9) * (walk > 0 ? 0.11f : 0), bob = walk > 0 ? std::fabs(std::sin(walk * 9)) * 0.025f : std::sin(t * (1.6f + anger * 3) + (L & 31)) * 0.006f;
     float shake = anger > 0.6f ? std::sin(t * 24 + L) * 0.006f * anger : 0;
     disc({feet.x, feet.y + 0.004f, feet.z}, 0.3f, {40, 30, 26, 70}, 14);   // a soft shadow

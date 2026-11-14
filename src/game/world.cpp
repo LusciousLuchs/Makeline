@@ -59,7 +59,7 @@ void people(float dt) {
         }
         Vector3 goal = DOOR;
         if (!leaving) {
-            if (c.state == C_ORDERING) goal = lineSpot(0);
+            if (c.state == C_ORDERING) goal = c.server >= 0 ? Vector3{-2.6f - 1.2f * (c.server % 2), 0, REG_SPOT.z} : lineSpot(0);
             else if (c.state == C_INLINE) { auto it = std::find(line.begin(), line.end(), c.id); goal = lineSpot((int)(it - line.begin()) + (atReg ? 1 : 0)); }
             else { auto it = std::find(lobby.begin(), lobby.end(), c.id); goal = lobbySpot((int)(it - lobby.begin())); }
         }
@@ -363,6 +363,13 @@ void worldDraw() {
         float anger = c->state == C_DONE ? (c->leftStars >= 4 ? 0.0f : c->leftStars == 3 ? 0.4f : 1.0f) : 1 - c->patience;
         g3::person(c->who, {v.x, 0, v.z}, v.yaw, anger, v.walk);
     }
+    // the crew, in uniform, where they work
+    int nc = 0, nk = 0, nd = 0;
+    for (auto& w : S.staff) {
+        if (w.role == CSR) g3::person(w.who, {-2.6f - 1.2f * (nc++ % 2), 0, 0.72f}, 180, -1, 0);
+        else if (w.role == COOK) g3::person(w.who, {-3.78f, 0, 1.7f + 0.9f * nk++}, 270, -1, w.ticket >= 0 ? ui::time : 0);
+        else if (!w.out) g3::person(w.who, {4.05f, 0, 1.5f + 0.8f * nd++}, 90, -1, 0);
+    }
     g3::end();
 }
 
@@ -395,7 +402,8 @@ void worldHud() {
             if (o) {
                 char b[32];
                 bool ready = o->ready && !o->done;
-                snprintf(b, sizeof b, ready ? "READY #%d" : "#%d", o->num);
+                float mins = o->minutes(S.t);
+                if (ready) snprintf(b, sizeof b, "READY #%d", o->num); else snprintf(b, sizeof b, "#%d  %d:%02d", o->num, (int)mins, (int)(mins * 60) % 60);
                 float w = ui::textW(b, 19) + 20, bounce = ready ? std::fabs(std::sin(ui::time * 5)) * 8 : 0;
                 ui::panel({p.x - w / 2, y - 30 - bounce, w, 26}, ready ? ui::GREEN : ui::PAPER, 8, 2, false);
                 ui::text(b, p.x, y - 27 - bounce, 19, ready ? ui::PAPER : INK, 1);
@@ -441,5 +449,6 @@ void worldHud() {
     int open = (int)S.openTickets().size();
     if (open) chip(std::to_string(open) + (open == 1 ? " ticket to make" : " tickets to make"), ui::CREAM, false);
     if (!S.exitQ.empty()) chip(std::to_string(S.exitQ.size()) + " out of the oven", {250, 170, 90, 255}, false);
-    if (S.t < 14 && S.day == 1) ui::text("WASD walk    Mouse look    E use    Shift hurry    Esc pause", 800, 850, 22, ui::PAPER, 1);
+    if (S.t < 20 && S.day == 1) ui::text("WASD walk    Mouse look    E use    Shift hurry    M manager's office    Esc pause", 800, 850, 22, ui::PAPER, 1);
+    else ui::text("M: office", 1584, 866, 18, ui::PAPER, 2);
 }

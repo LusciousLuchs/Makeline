@@ -208,7 +208,7 @@ int starsFor(float penalty) {
     return 1;
 }
 
-OrderScore scoreOrder(const std::vector<Spec>& want, const std::vector<const Pizza*>& made, int wantService, int gotService, float waitRatio) {
+OrderScore scoreOrder(const std::vector<Spec>& want, const std::vector<const Pizza*>& made, int wantService, int gotService, float minutes) {
     OrderScore out;
     int nw = (int)want.size(), nm = (int)made.size(), n = std::max(nw, nm);
     std::vector<int> perm(n);
@@ -228,8 +228,9 @@ OrderScore scoreOrder(const std::vector<Spec>& want, const std::vector<const Piz
     } while (std::next_permutation(perm.begin(), perm.end()));
     out.score = best;
     if (wantService != gotService && !(wantService == COUNTER || gotService == COUNTER)) out.score.add(WRONG_SERVICE, 3.0f);
-    if (waitRatio > 1.6f) out.score.add(VERY_LATE, 2.0f);
-    else if (waitRatio > 1.0f) out.score.add(LATE, 1.0f);
+    if (minutes > EXTREME_MIN) out.score.add(EXTREMELY_LATE, 3.5f);
+    else if (minutes > VERY_LATE_MIN) out.score.add(VERY_LATE, 2.0f);
+    else if (minutes > LATE_MIN) out.score.add(LATE, 1.0f);
     out.stars = starsFor(out.score.penalty);
     return out;
 }

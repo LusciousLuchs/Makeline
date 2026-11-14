@@ -4,3 +4,4 @@ build-*/
 *.o
 *.obj
 makeline_save.json
+dist/

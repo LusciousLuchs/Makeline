@@ -23,7 +23,17 @@ void Store::startDay(uint64_t seed) {
     talk = Talk{};
     bench = cutBoard = -1;
     oven.clear(); exitQ.clear();
-    driversFree = 2; driversBack.clear();
+    Rng mapRng(seed * 31 + day);
+    roads.generate(mapRng);
+    dayNotes.clear(); dayWages = 0;
+    if (!crewSet) {   // the store comes with one driver
+        crewSet = true;
+        Rng r(hireSeed);
+        Worker w; w.who = makePerson(r); w.who.age = 19 + r.below(30); w.role = DRIVER; w.skill = 0.6f; w.wage = 50;
+        staff.push_back(w);
+    }
+    if (applicants.empty()) newApplicants();
+    for (auto& w : staff) { w.tips = 0; w.mistakes = w.yelled = w.jobs = 0; w.wroteUpToday = false; w.busy = 0; w.cust = w.ticket = -1; w.out = false; w.stops.clear(); w.route.clear(); }
     nextArrival = 3;
     events.clear(); dayReviews.clear();
     dayMoney = dayTips = 0; dayOrders = dayLost = 0;
@@ -42,14 +52,228 @@ int Store::reprimandsThisWeek() const {
     for (int d : reprimands) if (d > day - 7 && d <= day) n++;
     return n;
 }
+const char* roleName(int role) { static const char* N[] = {"Customer service", "Makeline", "Driver"}; return N[role < 0 ? 0 : role > 2 ? 2 : role]; }
+void Store::note(const std::string& s) { dayNotes.push_back(s); events.push_back({E_NOTE, 0, s}); }
+int Store::driversIn() const { int n = 0; for (auto& w : staff) if (w.role == DRIVER && !w.out) n++; return n; }
+
+void Store::newApplicants() {
+    Rng r(hireSeed += 77);
+    applicants.clear();
+    for (int i = 0; i < 5; i++) {
+        Worker w;
+        w.who = makePerson(r);
+        w.role = i < 3 ? i : r.below(ROLE_N);
+        w.who.age = w.role == DRIVER ? 18 + r.below(45) : 16 + (int)(r.f() * r.f() * 50);
+        w.skill = r.range(0.3f, 0.92f);
+        w.mood = r.range(0.55f, 0.85f);
+        float base = w.role == CSR ? 55 : w.role == COOK ? 65 : 45;
+        w.wage = (float)(int)(base * (0.7f + 0.7f * w.skill));   // the good ones know what they're worth
+        applicants.push_back(w);
+    }
+}
+bool Store::hire(int i) {
+    if (i < 0 || i >= (int)applicants.size() || staff.size() >= 8) return false;
+    staff.push_back(applicants[i]);
+    applicants.erase(applicants.begin() + i);
+    return true;
+}
+void Store::fireWorker(int i) {
+    if (i < 0 || i >= (int)staff.size()) return;
+    Worker& w = staff[i];
+    // whatever they were in the middle of goes back
+    if (Customer* c = cust(w.cust)) { if (c->state == C_ORDERING && c->server == i) { c->state = c->phone ? C_RINGING : C_INLINE; c->server = -1; c->timer = 0; } }
+    if (Ticket* k = ticket(w.ticket)) { if (k->state == T_MAKING) { k->state = T_WAIT; k->madeBy = -1; } }
+    if (w.out) return;   // (they finish the run first; fire them when they're back)
+    staff.erase(staff.begin() + i);
+    for (auto& c : custs) { if (c.server == i) c.server = -1; else if (c.server > i) c.server--; }
+    for (auto& o : orders) { if (o.takenBy == i) o.takenBy = -1; else if (o.takenBy > i) o.takenBy--; if (o.driver == i) o.driver = -1; else if (o.driver > i) o.driver--; }
+    for (auto& k : tickets) { if (k.madeBy == i) k.madeBy = -1; else if (k.madeBy > i) k.madeBy--; }
+}
+void Store::writeUp(int i) {
+    if (i < 0 || i >= (int)staff.size() || staff[i].wroteUpToday) return;
+    Worker& w = staff[i];
+    w.wroteUpToday = true; w.writeUps++;
+    w.careDays = 2;
+    w.mood -= w.mistakes > 0 ? 0.2f : 0.38f;   // being written up for nothing stings twice as much
+    note(w.mistakes > 0 ? "You wrote " + w.who.name + " up." : "You wrote " + w.who.name + " up for nothing. They noticed.");
+}
+
+void Store::sendDriver(int wi) {
+    Worker& w = staff[wi];
+    std::vector<Order*> load;
+    for (auto& o : orders) if (!o.done && !o.out && o.ready && o.service == DELIVERY && load.size() < 3) load.push_back(&o);
+    if (load.empty()) return;
+    float speed = 0.85f + 0.4f * w.care();   // good drivers know the shortcuts
+    w.stops.clear(); w.route.clear();
+    int at = roads.store();
+    float clock = 0;
+    w.route.push_back({0, 0, 0});
+    auto drive = [&](int to) {
+        std::vector<int> path;
+        float mins = roads.minutes(at, to, &path) / speed;
+        float total = 0;
+        for (size_t i = 1; i < path.size(); i++) total += std::hypot(roads.x[path[i]] - roads.x[path[i - 1]], roads.y[path[i]] - roads.y[path[i - 1]]);
+        float run = 0;
+        for (size_t i = 1; i < path.size(); i++) {
+            run += std::hypot(roads.x[path[i]] - roads.x[path[i - 1]], roads.y[path[i]] - roads.y[path[i - 1]]);
+            w.route.push_back({roads.x[path[i]], roads.y[path[i]], clock + mins * (total > 0 ? run / total : 1)});
+        }
+        clock += mins; at = to;
+    };
+    while (!load.empty()) {   // nearest door first
+        size_t best = 0; float bestT = 1e9f;
+        for (size_t i = 0; i < load.size(); i++) {
+            Customer* c = cust(load[i]->cust);
+            int node = c && c->addr >= 0 ? c->addr : roads.store() + 1;
+            float m = roads.minutes(at, node);
+            if (m < bestT) { bestT = m; best = i; }
+        }
+        Order* o = load[best];
+        Customer* c = cust(o->cust);
+        drive(c && c->addr >= 0 ? c->addr : roads.store() + 1);
+        clock += 2;   // to the door, the money, the dog
+        w.route.push_back({w.route.back().x, w.route.back().y, clock});
+        w.stops.push_back({o->num, clock});
+        o->out = true; o->driver = wi;
+        load.erase(load.begin() + best);
+    }
+    drive(roads.store());
+    w.out = true; w.runT = 0; w.runLen = clock;
+    events.push_back({E_DRIVER, w.stops[0].order, w.who.name});
+}
+
+void Store::staffStep(float dt) {
+    for (int wi = 0; wi < (int)staff.size(); wi++) {
+        Worker& w = staff[wi];
+        float care = w.care();
+        if (w.role == DRIVER) {
+            if (!w.out) { sendDriver(wi); continue; }
+            w.runT += dt / SEC_PER_MIN;
+            for (auto& st : w.stops) {
+                Order* o = order(st.order);
+                if (o && !o->done && w.runT >= st.at) { resolve(*o); w.jobs++; Customer* c = cust(o->cust); events.push_back({E_DELIVERED, c ? c->leftStars : 0, ""}); }
+            }
+            if (w.runT >= w.runLen) { w.out = false; w.stops.clear(); w.route.clear(); }
+            continue;
+        }
+        if (w.role == CSR) {
+            Customer* c = cust(w.cust);
+            if (c && (c->state != C_ORDERING || c->server != wi)) { w.cust = -1; c = nullptr; }
+            if (!c) {   // hand over what's ready, then the phone, then the line; never the customer you're already talking to
+                w.busy -= dt;
+                if (w.busy > 0) continue;
+                bool gave = false;
+                for (int id : lobby()) { Customer* q = cust(id); Order* o = q ? order(q->order) : nullptr; if (o && o->ready && !o->done && q->timer > 2.5f) { handOut(id); w.busy = 3; gave = true; break; } }
+                if (gave) continue;
+                int id = ringing() >= 0 ? ringing() : firstInLine();
+                Customer* n = cust(id);
+                if (!n || closed) continue;
+                if (n->state == C_INLINE && n->timer < 2.5f) continue;   // (gives you the chance to take them yourself)
+                n->state = C_ORDERING; n->server = wi; n->timer = 0;
+                w.cust = id;
+                w.busy = (16 + 7 * (float)n->want.size()) * (1.5f - 0.6f * care) * rng.range(0.85f, 1.2f);
+                if (n->patience < 0.5f || n->who.mood == 3) { w.yelled++; w.mood -= 0.03f; }   // rude ones wear them down
+                continue;
+            }
+            w.busy -= dt;
+            if (w.busy > 0) continue;
+            std::vector<Spec> entered = c->want;
+            int service = c->phone ? c->service : COUNTER;
+            if (!rng.chance(0.25f + 0.75f * care)) {   // they got something wrong
+                Spec& sp = entered[rng.below((int)entered.size())];
+                int kind = rng.below(4);
+                std::vector<int> tops;
+                for (auto& it : sp.items) if (it.ing != MOZZ) tops.push_back(it.ing);
+                if (kind == 0 || (kind == 1 && tops.empty())) { int z = sp.size; while (z == sp.size || !crustComesIn(sp.crust, z)) { z = rng.below(SIZE_N); if (sp.crust == PAN) break; } if (z != sp.size) sp.size = z; else sp.items.push_back({PINEAPPLE, WHOLE, NORMAL}); }
+                else if (kind == 1) sp.remove(tops[rng.below((int)tops.size())]);
+                else if (kind == 2) { int d = ONION + rng.below(ING_N - ONION); if (!sp.find(d)) sp.items.push_back({d, WHOLE, NORMAL}); else sp.sauce = (sp.sauce + 1) % SAUCE_N; }
+                else if (c->phone) service = service == DELIVERY ? CARRYOUT : DELIVERY;
+                else sp.sauce = (sp.sauce + 1 + rng.below(3)) % SAUCE_N;
+            }
+            w.cust = -1; w.jobs++;
+            place(*c, entered, service, wi);
+            continue;
+        }
+        // ---- the makeline: the cut table comes first (pizzas go cold), then the next ticket
+        w.busy -= dt;
+        Ticket* k = ticket(w.ticket);
+        if (k && k->state == T_MAKING && k->madeBy == wi) {
+            if (w.busy > 0 || !ovenHasRoom()) continue;
+            Pizza p = perfectPizza(k->spec, rng);
+            p.id = (int)pizzas.size(); p.ticket = k->id; p.baked = 0; p.cuts.clear();
+            float slop = (1 - care) * 0.9f;
+            // portions by eye: each ingredient a bit over or under, and now and then one forgotten
+            for (int ing = SAUCE_N; ing < ING_N; ing++) {
+                float have = p.amount(ing);
+                if (have <= 0) continue;
+                float f = 1 + rng.range(-slop, slop);
+                if (ing != MOZZ && rng.chance((1 - care) * 0.22f)) f = 0;
+                if (f < 1) { int drop = (int)(have * (1 - f)); for (size_t i = p.bits.size(); i-- > 0 && drop > 0;) if (p.bits[i].ing == ing && rng.chance(0.6f)) { p.bits.erase(p.bits.begin() + i); drop--; } }
+                else { int add = (int)(have * (f - 1)); for (int i = 0; i < add; i++) { float a = rng.range(0, 6.28f), rr = std::sqrt(rng.f()) * 0.8f; p.addBit(ing, rr * std::cos(a), rr * std::sin(a), rng); } }
+            }
+            float sf = 1 + rng.range(-slop, slop);
+            for (int i = 0; i < SAUCE_N; i++) p.sauceOz[i] *= sf;
+            pizzas.push_back(p);
+            k->pizza = p.id; k->state = T_OVEN;
+            oven.push_back({p.id, 0});
+            w.ticket = -1; w.jobs++;
+            continue;
+        }
+        w.ticket = -1;
+        if (w.busy > 0) continue;
+        if (!exitQ.empty() && pizzas[exitQ[0]].cool > 5) {   // cut and box what's waiting (if you haven't got to it)
+            int id = exitQ[0];
+            exitQ.erase(exitQ.begin());
+            Pizza& p = pizzas[id];
+            p.cuts = perfectPizza(Spec{p.size, p.crust}, rng).cuts;
+            if (!rng.chance(0.3f + 0.7f * care)) p.cuts.resize(p.cuts.size() / 2);
+            p.boxed = true;
+            w.busy = 7 * (1.5f - 0.6f * care);
+            if (Ticket* q = ticket(p.ticket)) if (q->state == T_EXIT) {
+                q->state = T_BOXED;
+                Order* o = order(q->order);
+                if (o && !o->done) { bool all = true; for (int tid : o->tickets) { Ticket* z = ticket(tid); if (z && z->state != T_BOXED) all = false; } if (all) { o->ready = true; events.push_back({E_READY, o->num, ""}); } }
+            }
+            continue;
+        }
+        auto open = openTickets();
+        if (!open.empty()) {
+            Ticket* q = ticket(open[0]);
+            q->state = T_MAKING; q->madeBy = wi;
+            w.ticket = q->id;
+            w.busy = (15 + 2.5f * (float)q->spec.items.size()) * (1.5f - 0.6f * care) * rng.range(0.9f, 1.15f);
+        }
+    }
+}
+
 int Store::closeDay() {
+    // payday and how everyone feels about today
+    for (int i = (int)staff.size(); i-- > 0;) {
+        Worker& w = staff[i];
+        money -= w.wage; dayWages += w.wage;
+        if (w.role == DRIVER) {
+            if (w.jobs > 0 && w.tips < 2) { w.mood -= 0.22f; dayNotes.push_back(w.who.name + " drove all night for no tips."); }
+            else if (w.tips >= 6) w.mood += 0.08f;
+        } else if (w.role == CSR) {
+            w.mood += 0.07f - 0.035f * w.yelled;
+            if (w.yelled >= 3) dayNotes.push_back(w.who.name + " got yelled at " + std::to_string(w.yelled) + " times today.");
+        } else w.mood += w.jobs > 14 ? -0.05f : 0.05f;
+        if (w.careDays > 0) w.careDays--;
+        w.mood = std::clamp(w.mood, 0.f, 1.f);
+        if (w.mood < 0.15f) {
+            dayNotes.push_back(w.who.name + (w.role == DRIVER ? " threw the car topper on the counter and quit." : w.role == CSR ? " took off the headset, said \"I'm done,\" and quit." : " hung up the apron and quit."));
+            w.out = false;
+            fireWorker(i);
+        }
+    }
+    newApplicants();
     if (dayReviews.empty() || rating() >= REPRIMAND_BELOW) return 0;
     if (reprimands.empty() || reprimands.back() != day) reprimands.push_back(day);
     if (reprimandsThisWeek() >= 3) { fired = true; return 2; }
     return 1;
 }
 std::string Store::clock() const {
-    int mins = 16 * 60 + (int)(std::min(t, (double)SHIFT_LEN + 240) / SHIFT_LEN * 360);
+    int mins = 17 * 60 + (int)(std::min(t, (double)SHIFT_LEN + 240) / SEC_PER_MIN);
     int h = mins / 60, m = mins % 60;
     char b[24];
     snprintf(b, sizeof b, "%d:%02d %s", h > 12 ? h - 12 : h, m, h >= 12 ? "PM" : "AM");
@@ -121,32 +345,34 @@ void Store::askReadBack() {
 bool Store::finishOrder() {
     Customer* c = cust(talk.cust);
     if (!c || talk.draft.empty()) return false;
+    place(*c, talk.draft, c->phone ? talk.draftService : COUNTER, -1);
+    talk = Talk{};
+    return true;
+}
+void Store::place(Customer& c, const std::vector<Spec>& entered, int service, int takenBy) {
     Order o;
     o.num = nextOrder++;
-    o.cust = c->id;
-    o.service = c->phone ? talk.draftService : COUNTER;
-    o.entered = talk.draft;
+    o.cust = c.id;
+    o.service = service;
+    o.entered = entered;
     o.placed = t;
-    int n = (int)o.entered.size(), ahead = 0;
-    for (auto& k : tickets) if (k.state != T_BOXED && k.state != T_VOID) ahead++;
-    float base = o.service == COUNTER ? 85 : o.service == CARRYOUT ? 115 : 150;
-    o.budget = base + 45 * (std::max(1, (int)c->want.size()) - 1) + 12 * ahead;
+    o.takenBy = takenBy;
+    int n = (int)o.entered.size();
+    if (c.phone && c.service == DELIVERY) c.addr = roads.randomAddress(rng);
     for (int i = 0; i < n; i++) {
         Ticket k{nextTicket++, o.num, i + 1, n, o.entered[i]};
         o.tickets.push_back(k.id);
         tickets.push_back(k);
         o.price += price(o.entered[i]);
     }
-    c->order = o.num;
-    c->timer = 0; c->patience = 1;
-    if (!c->phone) c->state = C_WAITING;
-    else if (c->service == CARRYOUT) { c->state = C_COMING; c->arriveIn = rng.range(45, 75); }
-    else c->state = C_AWAY;
+    c.order = o.num;
+    c.timer = 0; c.patience = 1; c.server = -1;
+    if (!c.phone) c.state = C_WAITING;
+    else if (c.service == CARRYOUT) { c.state = C_COMING; c.arriveIn = rng.range(45, 75); }
+    else c.state = C_AWAY;
     orders.push_back(o);
     dayOrders++;
     events.push_back({E_PLACED, o.num, ""});
-    talk = Talk{};
-    return true;
 }
 
 void Store::review(const Customer& c, const Score& sc, int stars) {
@@ -181,13 +407,30 @@ void Store::resolve(Order& o, std::vector<Issue> extra) {
     }
     OrderScore os;
     if (!c) return;
-    if (extra.empty()) os = scoreOrder(c->want, made, c->phone ? c->service : COUNTER, o.service, (float)((t - o.placed) / o.budget));
+    if (extra.empty()) os = scoreOrder(c->want, made, c->phone ? c->service : COUNTER, o.service, o.minutes(t));
     else { for (auto& is : extra) os.score.add(is.code, is.pts, is.ing); os.stars = starsFor(os.score.penalty); }
     if (os.stars >= 3) {
-        float tip = os.stars == 5 ? o.price * (o.service == DELIVERY ? 0.18f : 0.06f) : os.stars == 4 ? o.price * 0.04f : 0;
-        money += o.price + tip; dayMoney += o.price; dayTips += tip;
+        float tip = os.stars == 5 ? o.price * (o.service == DELIVERY ? 0.18f : 0.06f) : os.stars == 4 ? o.price * (o.service == DELIVERY ? 0.08f : 0.04f) : 0;
+        money += o.price; dayMoney += o.price;
+        if (o.driver >= 0 && o.driver < (int)staff.size()) staff[o.driver].tips += tip;   // a driver keeps their tips
+        else { money += tip; dayTips += tip; }
     }   // two stars or worse: they got their money back
     c->leftStars = os.stars;
+    // whose fault was it? An order rung up wrong is on whoever took it; a pizza made wrong is on whoever made it
+    if (os.stars <= 3 && extra.empty()) {
+        bool rungWrong = o.entered.size() != c->want.size() || (c->phone && o.service != c->service);
+        for (size_t i = 0; !rungWrong && i < o.entered.size(); i++) { bool any = false; for (auto& w : c->want) if (sameSpec(w, o.entered[i])) any = true; if (!any) rungWrong = true; }
+        if (rungWrong && o.takenBy >= 0 && o.takenBy < (int)staff.size()) { staff[o.takenBy].mistakes++; note(staff[o.takenBy].who.name + " rang up order #" + std::to_string(o.num) + " wrong."); }
+        for (int id : o.tickets) {
+            Ticket* k = ticket(id);
+            if (!k || k->madeBy < 0 || k->madeBy >= (int)staff.size() || k->pizza < 0) continue;
+            Score ps = scorePizza(k->spec, pizzas[k->pizza]);
+            float bad = 0; std::string why;
+            for (auto& is : ps.issues) if (is.code != LUKEWARM && is.code != COLD && is.pts > bad) { bad = is.pts; why = issueLine(is); }
+            if (bad >= 1) { staff[k->madeBy].mistakes++; note(staff[k->madeBy].who.name + " botched a pizza on order #" + std::to_string(o.num) + " (" + why + ")."); }
+        }
+        if (o.driver >= 0 && o.driver < (int)staff.size()) for (auto& is : os.score.issues) if (is.code == EXTREMELY_LATE) { staff[o.driver].mistakes++; break; }
+    }
     if (c->state == C_WAITING || c->state == C_COMING) c->leaving = 0.01f;
     c->state = C_DONE;
     review(*c, os.score, os.stars);
@@ -266,7 +509,7 @@ void Store::update(float dt) {
     // ---- people arriving: slow at open, a dinner rush in the middle
     if (!closed && t < SHIFT_LEN - 25 && t >= nextArrival) {
         spawn();
-        float mean = std::max(27.f, 48.f - 4.f * (day - 1));
+        float mean = std::max(30.f, 58.f - 5.f * (day - 1));
         float u = (float)(t / SHIFT_LEN), rush = 1.0f - 0.4f * std::exp(-(u - 0.55f) * (u - 0.55f) / 0.04f);
         nextArrival = t + mean * rush * rng.range(0.55f, 1.45f);
     }
@@ -312,7 +555,7 @@ void Store::update(float dt) {
             default: break;
         }
         if (c.state == C_WAITING || c.state == C_INLINE) {
-            if (Order* o = order(c.order)) c.patience = std::clamp(1 - (float)((t - o->placed) / o->budget), 0.f, 1.f);
+            if (Order* o = order(c.order)) c.patience = std::clamp(1 - o->minutes(t) / VERY_LATE_MIN, 0.f, 1.f);
             c.barkT -= dt; c.nextBark -= dt;
             if (c.nextBark <= 0) {
                 c.nextBark = rng.range(7, 16) * (0.5f + c.patience);
@@ -336,24 +579,18 @@ void Store::update(float dt) {
         if (o && o->done) continue;
         p.cool += dt * (p.boxed ? 0.3f : 1.0f);
     }
-    // ---- drivers and the orders that went wrong on the phone
-    for (auto& b : driversBack) b -= dt;
-    for (size_t i = driversBack.size(); i-- > 0;) if (driversBack[i] <= 0) { driversBack.erase(driversBack.begin() + i); driversFree++; }
+    // ---- the staff, and the orders that went wrong on the phone
+    staffStep(dt);
     for (auto& o : orders) {
         if (o.done) continue;
         Customer* c = cust(o.cust);
         if (!c) continue;
         if (o.service == DELIVERY) {
-            if (o.ready && !o.out && driversFree > 0) { o.out = true; o.tripLeft = 22; driversFree--; driversBack.push_back(44); events.push_back({E_DRIVER, o.num, ""}); }
-            if (o.out) {
-                o.tripLeft -= dt;
-                if (o.tripLeft <= 0) { resolve(o); events.push_back({E_DELIVERED, c->leftStars, ""}); }
-            }
             // they said pickup: they turn up at the counter and there's nothing for them
-            if (!o.done && c->service == CARRYOUT && c->state == C_WAITING && c->timer > 6) resolve(o, {{WRONG_SERVICE, -1, 4}});
+            if (c->service == CARRYOUT && c->state == C_WAITING && c->timer > 6) resolve(o, {{WRONG_SERVICE, -1, 4}});
         } else if (o.service == CARRYOUT && c->service == DELIVERY) {
             // they said delivery: nobody ever comes for it
-            if (t - o.placed > o.budget * 1.3f) resolve(o, {{WRONG_SERVICE, -1, 4}});
+            if (o.minutes(t) > 40) resolve(o, {{WRONG_SERVICE, -1, 4}});
         }
     }
     // ---- closing time
@@ -377,6 +614,12 @@ std::string Store::toJson() const {
     for (auto& r : reviews) arr.push_back({{"name", r.name}, {"text", r.text}, {"stars", r.stars}, {"day", r.day}});
     j["reviews"] = arr;
     j["reprimands"] = reprimands;
+    j["hireSeed"] = hireSeed;
+    j["crewSet"] = crewSet;
+    auto st = nlohmann::json::array();
+    for (auto& w : staff) st.push_back({{"name", w.who.name}, {"look", w.who.look}, {"age", w.who.age}, {"sex", w.who.sex}, {"skin", w.who.skin}, {"hair", w.who.hair},
+        {"hairStyle", w.who.hairStyle}, {"role", w.role}, {"skill", w.skill}, {"mood", w.mood}, {"wage", w.wage}, {"writeUps", w.writeUps}, {"careDays", w.careDays}});
+    j["staff"] = st;
     j["fired"] = fired;
     return j.dump(1);
 }
@@ -389,6 +632,17 @@ bool Store::fromJson(const std::string& text) {
     fired = j.value("fired", false);
     reprimands.clear();
     if (j.contains("reprimands") && j["reprimands"].is_array()) for (auto& d : j["reprimands"]) if (d.is_number_integer()) reprimands.push_back(d.get<int>());
+    hireSeed = j.value("hireSeed", (uint64_t)99);
+    crewSet = j.value("crewSet", false);
+    staff.clear();
+    if (j.contains("staff") && j["staff"].is_array()) for (auto& e : j["staff"]) if (e.is_object()) {
+        Worker w;
+        w.who.name = e.value("name", "Someone"); w.who.look = e.value("look", 0u); w.who.age = e.value("age", 30); w.who.sex = e.value("sex", 0);
+        w.who.skin = e.value("skin", 0); w.who.hair = e.value("hair", 0); w.who.hairStyle = e.value("hairStyle", 1);
+        w.role = std::clamp(e.value("role", 0), 0, 2); w.skill = e.value("skill", 0.6f); w.mood = e.value("mood", 0.7f); w.wage = e.value("wage", 50.f);
+        w.writeUps = e.value("writeUps", 0); w.careDays = e.value("careDays", 0);
+        staff.push_back(w);
+    }
     reviews.clear();
     if (j.contains("reviews") && j["reviews"].is_array())
         for (auto& r : j["reviews"]) if (r.is_object()) {
