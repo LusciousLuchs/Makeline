@@ -1,4 +1,4 @@
-// Makeline - the makeline: tickets on the rail, dough, sauce, cheese and toppings by hand.
+// Makeline - working the makeline: tickets, dough, then sauce, cheese and toppings by hand onto the pizza in front of you.
 #include "game.hpp"
 #include <algorithm>
 #include <cmath>
@@ -8,69 +8,30 @@ using namespace pz;
 using ui::INK;
 
 namespace {
-const Vector2 PC{690, 590};      // the middle of the pizza on the bench
-const float PBASE = 245;         // a large, in pixels
-const float RIN[] = {5, 6, 7, 8};
-
 void rail() {
     Store& S = G.S;
-    DrawRectangle(0, 64, 1600, 196, {96, 104, 112, 255});
-    DrawRectangle(0, 82, 1600, 12, {200, 206, 212, 255});
-    DrawRectangle(0, 80, 1600, 3, INK); DrawRectangle(0, 93, 1600, 3, INK);
+    DrawRectangle(0, 64, 1600, 200, {40, 30, 26, 150});
     auto open = S.openTickets();
-    if (open.empty() && S.bench < 0) ui::text("No tickets. Go take some orders.", 800, 150, 26, {220, 224, 228, 255}, 1);
-    float x = 24;
+    if (open.empty()) ui::text("No tickets. Go take some orders.", 800, 150, 26, ui::PAPER, 1);
+    float x = 230;
     for (int id : open) {
         Ticket* k = S.ticket(id);
-        Rectangle r{x, 88, 176, 166};
+        Rectangle r{x, 80, 176, 170};
         bool sel = G.pickTicket == id;
-        if (sel) r.y += 6;
+        if (sel) r.y += 8;
         drawTicket(*k, S.order(k->order), r, sel, 15);
-        if (S.bench < 0 && ui::hover(r)) {
+        if (ui::hover(r)) {
             DrawRectangleLinesEx({r.x - 4, r.y - 4, r.width + 8, r.height + 8}, 3, ui::YELLOW);
             if (ui::pressed && !ui::clickUsed) { ui::clickUsed = true; G.pickTicket = id; G.doughSize = G.doughCrust = -1; sfx(SFX_CLICK); }
         }
         x += 190;
-        if (x > 1500) break;
-    }
-}
-
-void bins() {
-    Rectangle area{1050, 272, 530, 520};
-    ui::panel(area, {150, 158, 166, 255}, 10, 4, true);
-    static const char* HEAD[] = {"SAUCES", "CHEESES", "VEGETABLES", "MEATS"};
-    static const int ROWS[4][6] = {{MARINARA, ALFREDO, GARLIC_PARM, BBQ, -1, -1}, {MOZZ, MOZZ_BALLS, PROVOLONE, CHEDDAR, PARMESAN, FETA},
-        {ONION, PEPPER, PINEAPPLE, TOMATO, MUSHROOM, OLIVE}, {SAUSAGE, PEPPERONI, HAM, BACON, BEEF, CHICKEN}};
-    float y = area.y + 8;
-    for (int r = 0; r < 4; r++) {
-        ui::text(HEAD[r], area.x + 12, y, 16, INK);
-        y += 20;
-        float bw = (area.width - 20 - 5 * 6) / 6, bh = 100;
-        for (int i = 0; i < 6; i++) {
-            int ing = ROWS[r][i];
-            if (ing < 0) continue;
-            Rectangle b{area.x + 10 + i * (bw + 6), y, bw, bh};
-            bool sel = G.tool == ing, hov = ui::hover(b);
-            DrawRectangleRounded({b.x - 3, b.y - 3, b.width + 6, b.height + 6}, 0.2f, 6, sel ? ui::RED : INK);
-            DrawRectangleRounded(b, 0.2f, 6, hov ? Color{236, 240, 244, 255} : Color{214, 220, 226, 255});
-            DrawRectangleRounded({b.x + 6, b.y + 6, b.width - 12, 58}, 0.25f, 6, {70, 76, 84, 255});   // the pan
-            drawIngredientIcon(ing, {b.x + b.width / 2, b.y + 35}, info(ing).kind == SAUCE ? 20 : 17);
-            std::string n = info(ing).name;
-            size_t sp = n.find(' ');
-            float fs = 14;
-            if (sp != std::string::npos && ui::textW(n, fs) > b.width - 6) {
-                ui::text(n.substr(0, sp), b.x + b.width / 2, b.y + 66, fs, INK, 1);
-                ui::text(n.substr(sp + 1), b.x + b.width / 2, b.y + 81, fs, INK, 1);
-            } else ui::text(n, b.x + b.width / 2, b.y + 73, fs, INK, 1);
-            if (hov && ui::pressed && !ui::clickUsed) { ui::clickUsed = true; G.tool = sel ? -1 : ing; G.sprinkle = 0; sfx(SFX_CLICK); }
-        }
-        y += bh + 6;
+        if (x > 1420) break;
     }
 }
 
 // what's on the pizza so far, against the ticket when the guides are on
 void readout(const Pizza& p, const Ticket* k) {
-    Rectangle box{20, 560, 300, 322};
+    Rectangle box{20, 350, 300, 330};
     ui::panel(box, ui::PAPER, 10, 4, true);
     ui::text("ON THE PIZZA", box.x + 14, box.y + 10, 20, INK);
     float y = box.y + 40;
@@ -116,7 +77,7 @@ void doughPicker() {
     Store& S = G.S;
     Ticket* k = S.ticket(G.pickTicket);
     if (!k || k->state != T_WAIT) { G.pickTicket = -1; k = nullptr; }
-    Rectangle box{360, 300, 660, 560};
+    Rectangle box{470, 290, 660, 560};
     ui::panel(box, {226, 214, 190, 255}, 14, 4, true);
     if (!k) {
         auto open = S.openTickets();
@@ -147,12 +108,27 @@ void doughPicker() {
     }
 }
 
+
+// the mouse over the makeline: pans pick an ingredient, the pizza takes it
 void work(Pizza& p) {
-    Store& S = G.S;
-    float r = pizzaRadius(p.size, PBASE), inch = 1.0f / RIN[p.size];
-    Vector2 m{(ui::M.x - PC.x) / r, (ui::M.y - PC.y) / r};
-    bool over = m.x * m.x + m.y * m.y <= 1.08f * 1.08f && !ui::clickUsed && !G.chart;
-    float dt = GetFrameTime();
+    const g3::Frame& F = MAKE_F;
+    float R = g3::pizzaMetres(p.size), inch = 0.0254f / R, dt = GetFrameTime();
+    Vector3 hit;
+    bool onUi = ui::M.x < 330 || (ui::M.x > 1290 && ui::M.y > 700) || ui::M.y < 64 || ui::clickUsed || G.chart;
+    if (onUi || !mouseOnPlane(F.o.y + 0.014f, hit)) { if (!ui::down) G.lastPiece = {-9, -9}; return; }
+    Vector2 l = F.local(hit);
+    for (int ing = 0; ing < ING_N; ing++) {
+        Vector2 b = binSpot(ing);
+        if (std::fabs(l.x - b.x) < BIN / 2 && std::fabs(l.y - b.y) < BIN / 2) {
+            Vector2 a, c;
+            if (project(F.at(b.x - BIN / 2, 0.01f, b.y - BIN / 2), a) && project(F.at(b.x + BIN / 2, 0.01f, b.y + BIN / 2), c))
+                DrawRectangleLinesEx({std::min(a.x, c.x), std::min(a.y, c.y), std::fabs(c.x - a.x), std::fabs(c.y - a.y)}, 3, ui::YELLOW);
+            if (ui::pressed) { ui::clickUsed = true; G.tool = G.tool == ing ? -1 : ing; G.sprinkle = 0; sfx(SFX_CLICK); }
+            return;
+        }
+    }
+    Vector2 m{(l.x - BENCH_X) / R, l.y / R};
+    bool over = m.x * m.x + m.y * m.y <= 1.08f * 1.08f;
     if (G.tool >= 0 && over) {
         const IngInfo& in = info(G.tool);
         if (in.kind == SAUCE) {
@@ -175,42 +151,17 @@ void work(Pizza& p) {
     }
     if (!ui::down) G.lastPiece = {-9, -9};
     if (ui::rdown && over) p.removeNear(m.x, m.y, 0.7f * inch);   // pick it back off
-    (void)S;
 }
 
-void bench() {
-    Store& S = G.S;
-    Pizza* p = S.pizza(S.bench);
-    if (!p) { doughPicker(); return; }
-    Ticket* k = S.ticket(p->ticket);
-    // the ticket being made, pinned up large
-    if (k) drawTicket(*k, S.order(k->order), {24, 276, 292, 270}, false, 20);
-    readout(*p, k);
-    // the board and the pizza
-    float r = pizzaRadius(p->size, PBASE);
-    DrawCircleV({PC.x + 6, PC.y + 10}, 300, ui::SHADOW);
-    DrawCircleV(PC, 300, INK);
-    DrawCircleV(PC, 296, {206, 170, 120, 255});
-    work(*p);
-    drawPizza(*p, PC, r);
-    bool halves = false;
-    if (k) for (auto& it : k->spec.items) if (it.part != WHOLE) halves = true;
-    if (halves) {   // a guide down the middle for half-and-half
-        for (float y = PC.y - r; y < PC.y + r; y += 18) DrawLineEx({PC.x, y}, {PC.x, y + 9}, 2, {255, 255, 255, 150});
-        ui::text("L", PC.x - r - 22, PC.y - 12, 26, INK, 1);
-        ui::text("R", PC.x + r + 22, PC.y - 12, 26, INK, 1);
+void labels() {
+    for (int ing = 0; ing < ING_N; ing++) {
+        Vector2 b = binSpot(ing), at;
+        if (!project(MAKE_F.at(b.x, 0.02f, b.y + BIN * 0.36f), at)) continue;
+        std::string n = info(ing).name;
+        float w = ui::textW(n, 14) + 10;
+        DrawRectangleRounded({at.x - w / 2, at.y - 9, w, 19}, 0.5f, 4, G.tool == ing ? ui::RED : Color{40, 30, 26, 200});
+        ui::text(n, at.x, at.y - 7, 14, ui::PAPER, 1);
     }
-    bool room = S.ovenHasRoom();
-    if (ui::button({1050, 806, 250, 70}, room ? "INTO THE OVEN" : "OVEN'S FULL", ui::RED, room, 26)) { if (S.benchToOven()) { sfx(SFX_OVEN); G.tool = -1; } }
-    if (ui::button({1316, 806, 124, 70}, "Trash it", {200, 190, 176, 255}, true, 20)) { S.trashBench(); sfx(SFX_BAD); G.tool = -1; }
-    // what's in hand follows the mouse
-    if (G.tool >= 0 && !G.chart) {
-        Vector2 at{ui::M.x + 26, ui::M.y + 26};
-        DrawCircleV(at, 26, {255, 255, 255, 190});
-        DrawRing(at, 26, 29, 0, 360, 24, INK);
-        drawIngredientIcon(G.tool, at, 13);
-    }
-    ui::text("Left mouse: ladle / sprinkle / place        Right mouse: pick toppings off", PC.x, 268, 17, {70, 60, 50, 255}, 1);
 }
 }  // namespace
 
@@ -247,11 +198,36 @@ void portionChart() {
     if (ui::button({box.x + box.width - 150, box.y + 16, 130, 44}, "Close", ui::YELLOW, true, 22) || IsKeyPressed(KEY_TAB)) G.chart = false;
 }
 
-void makeStation() {
-    DrawRectangle(0, 64, 1600, 836, {186, 192, 198, 255});
-    for (int i = 0; i < 9; i++) DrawRectangle(0, 300 + i * 70, 1600, 2, {174, 180, 186, 255});   // brushed steel
-    rail();
-    bins();
-    bench();
-    if (ui::button({1456, 806, 124, 70}, "Portion chart", ui::BLUE, true, 18)) G.chart = true;
+
+void makeOverlay() {
+    Store& S = G.S;
+    if (ui::button({20, 76, 190, 44}, "Step back (Esc)", ui::CREAM, true, 19)) { setMode(M_WALK); return; }
+    Pizza* p = S.pizza(S.bench);
+    if (!p) { rail(); doughPicker(); return; }
+    Ticket* k = S.ticket(p->ticket);
+    if (k) drawTicket(*k, S.order(k->order), {20, 132, 270, 206}, false, 17);
+    readout(*p, k);
+    labels();
+    work(*p);
+    bool halves = false;
+    if (k) for (auto& it : k->spec.items) if (it.part != WHOLE) halves = true;
+    float R = g3::pizzaMetres(p->size);
+    if (halves) {   // a guide down the middle for half-and-half
+        Vector2 a, b, l, r;
+        if (project(MAKE_F.at(BENCH_X, 0.03f, -R), a) && project(MAKE_F.at(BENCH_X, 0.03f, R), b))
+            for (int i = 0; i < 16; i += 2) DrawLineEx({a.x + (b.x - a.x) * i / 16, a.y + (b.y - a.y) * i / 16}, {a.x + (b.x - a.x) * (i + 1) / 16, a.y + (b.y - a.y) * (i + 1) / 16}, 3, {255, 255, 255, 190});
+        if (project(MAKE_F.at(BENCH_X - R - 0.035f, 0.02f, 0), l)) ui::text("L", l.x, l.y - 16, 30, ui::PAPER, 1);
+        if (project(MAKE_F.at(BENCH_X + R + 0.035f, 0.02f, 0), r)) ui::text("R", r.x, r.y - 16, 30, ui::PAPER, 1);
+    }
+    bool room = S.ovenHasRoom();
+    if (ui::button({1310, 806, 270, 70}, room ? "INTO THE OVEN" : "OVEN'S FULL", ui::RED, room, 26)) { if (S.benchToOven()) { sfx(SFX_OVEN); G.tool = -1; } }
+    if (ui::button({1310, 730, 128, 54}, "Trash it", {200, 190, 176, 255}, true, 20)) { S.trashBench(); sfx(SFX_BAD); G.tool = -1; }
+    if (ui::button({1452, 730, 128, 54}, "Portions", ui::BLUE, true, 20)) G.chart = true;
+    if (G.tool >= 0 && !G.chart) {   // what's in hand follows the mouse
+        Vector2 at{ui::M.x + 30, ui::M.y + 30};
+        DrawCircleV(at, 26, {255, 255, 255, 200});
+        DrawRing(at, 26, 29, 0, 360, 24, INK);
+        drawIngredientIcon(G.tool, at, 13);
+    }
+    ui::text("Left mouse: ladle / sprinkle / place        Right mouse: pick toppings off        Tab: portions", 800, 872, 17, ui::PAPER, 1);
 }

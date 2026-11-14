@@ -37,6 +37,17 @@ float Store::rating() const {
     for (size_t i = reviews.size() - n; i < reviews.size(); i++) s += reviews[i].stars;
     return s / n;
 }
+int Store::reprimandsThisWeek() const {
+    int n = 0;
+    for (int d : reprimands) if (d > day - 7 && d <= day) n++;
+    return n;
+}
+int Store::closeDay() {
+    if (dayReviews.empty() || rating() >= REPRIMAND_BELOW) return 0;
+    if (reprimands.empty() || reprimands.back() != day) reprimands.push_back(day);
+    if (reprimandsThisWeek() >= 3) { fired = true; return 2; }
+    return 1;
+}
 std::string Store::clock() const {
     int mins = 16 * 60 + (int)(std::min(t, (double)SHIFT_LEN + 240) / SHIFT_LEN * 360);
     int h = mins / 60, m = mins % 60;
@@ -365,6 +376,8 @@ std::string Store::toJson() const {
     auto arr = nlohmann::json::array();
     for (auto& r : reviews) arr.push_back({{"name", r.name}, {"text", r.text}, {"stars", r.stars}, {"day", r.day}});
     j["reviews"] = arr;
+    j["reprimands"] = reprimands;
+    j["fired"] = fired;
     return j.dump(1);
 }
 bool Store::fromJson(const std::string& text) {
@@ -373,6 +386,9 @@ bool Store::fromJson(const std::string& text) {
     day = std::max(1, j.value("day", 1));
     money = j.value("money", 0.f);
     guides = j.value("guides", true);
+    fired = j.value("fired", false);
+    reprimands.clear();
+    if (j.contains("reprimands") && j["reprimands"].is_array()) for (auto& d : j["reprimands"]) if (d.is_number_integer()) reprimands.push_back(d.get<int>());
     reviews.clear();
     if (j.contains("reviews") && j["reviews"].is_array())
         for (auto& r : j["reviews"]) if (r.is_object()) {

@@ -1,4 +1,4 @@
-// Makeline - the drawings: pizzas and everything on them, customers, tickets.
+// Makeline - flat drawings for the screens: topping icons and order tickets.
 #include "game.hpp"
 #include "rlgl.h"
 #include <algorithm>
@@ -16,8 +16,6 @@ Color ingColor(int ing) {
         {150, 96, 62, 255}, {190, 42, 36, 255}, {236, 150, 152, 255}, {168, 62, 46, 255}, {106, 72, 52, 255}, {240, 216, 172, 255}};
     return C[std::clamp(ing, 0, ING_N - 1)];
 }
-
-float pizzaRadius(int size, float base) { static const float K[] = {5 / 7.f, 6 / 7.f, 1, 8 / 7.f}; return base * K[std::clamp(size, 0, 3)]; }
 
 // one bit of a topping at the origin; s = pixels per inch
 static void bitShape(int ing, int var, float s, float baked) {
@@ -119,33 +117,6 @@ static void drawBit(int ing, int var, float x, float y, float rot, float s, floa
     rlPopMatrix();
 }
 
-void drawPizza(const Pizza& p, Vector2 c, float r, float bakeShow) {
-    static const float RIN[] = {5, 6, 7, 8};
-    float b = bakeShow >= 0 ? bakeShow : p.baked, s = r / RIN[std::clamp(p.size, 0, 3)];
-    float rim = p.crust == THIN ? 0.045f : 0.085f;
-    DrawCircleV({c.x + 5, c.y + 8}, r + 2, ui::SHADOW);
-    if (p.crust == PAN) {   // in its pan
-        DrawCircleV(c, r + 12, INK);
-        DrawCircleV(c, r + 9, {70, 70, 76, 255});
-    }
-    DrawCircleV(c, r + 3, INK);
-    DrawCircleV(c, r, ui::mix({238, 220, 178, 255}, p.crust == PAN ? Color{190, 128, 66, 255} : Color{210, 154, 88, 255}, b));
-    DrawCircleV(c, r * (1 - rim), ui::mix({246, 232, 198, 255}, {234, 200, 136, 255}, b));
-    for (auto& st : p.stamps) {
-        Color col = ingColor(st.sauce);
-        if (b > 0.5f) col = ui::shade(col, 0.92f);
-        DrawCircleV({c.x + st.x * r, c.y + st.y * r}, STAMP_R * r, col);
-    }
-    for (auto& bt : p.bits) drawBit(bt.ing, bt.var, c.x + bt.x * r, c.y + bt.y * r, bt.rot, s, b);
-    for (auto& ct : p.cuts) {
-        float nx = -std::sin(ct.ang), ny = std::cos(ct.ang), dx = std::cos(ct.ang), dy = std::sin(ct.ang);
-        float h = std::sqrt(std::max(0.f, 1 - ct.off * ct.off)) * r;
-        Vector2 m{c.x + nx * ct.off * r, c.y + ny * ct.off * r};
-        DrawLineEx({m.x - dx * h, m.y - dy * h}, {m.x + dx * h, m.y + dy * h}, 4, {90, 48, 26, 230});
-        DrawLineEx({m.x - dx * h, m.y - dy * h}, {m.x + dx * h, m.y + dy * h}, 1.5f, {250, 226, 170, 200});
-    }
-}
-
 void drawIngredientIcon(int ing, Vector2 c, float s) {
     if (info(ing).kind == SAUCE) {
         DrawCircleV(c, s * 1.0f + 2, INK);
@@ -157,58 +128,6 @@ void drawIngredientIcon(int ing, Vector2 c, float s) {
     int n = info(ing).piece ? 3 : 5;
     float k = (ing == PEPPERONI || ing == HAM) ? 0.62f : ing == MOZZ_BALLS ? 0.8f : 1.0f;
     for (int i = 0; i < n; i++) drawBit(ing, i, c.x + OFF[i][0] * s * 0.75f, c.y + OFF[i][1] * s * 0.6f, OFF[i][2], s * k, 0);
-}
-
-void drawCustomer(const Person& who, float x, float baseY, float k, float anger, float bob) {
-    uint32_t L = who.look;
-    static const Color SKIN[] = {{250, 220, 190, 255}, {238, 196, 160, 255}, {210, 160, 120, 255}, {160, 110, 80, 255}, {110, 76, 56, 255}};
-    static const Color SHIRT[] = {{86, 134, 190, 255}, {92, 158, 92, 255}, {214, 120, 60, 255}, {150, 100, 170, 255}, {200, 80, 90, 255}, {90, 90, 100, 255}, {230, 200, 90, 255}, {70, 150, 150, 255}};
-    static const Color HAIR[] = {{60, 40, 30, 255}, {30, 26, 28, 255}, {190, 150, 80, 255}, {150, 70, 40, 255}, {200, 200, 200, 255}};
-    Color skin = ui::mix(SKIN[L % 5], {226, 90, 70, 255}, anger * 0.45f), shirt = SHIRT[(L >> 3) % 8], hair = HAIR[(L >> 9) % 5];
-    int style = (L >> 6) % 5;
-    float wide = 1.0f + ((L >> 12) % 4) * 0.08f;
-    float shake = anger > 0.6f ? std::sin(ui::time * 22 + L) * 1.5f * anger : 0;
-    x += shake;
-    float y = baseY + std::sin(ui::time * (1.6f + anger * 3) + (L & 31)) * 2.5f * k + bob;
-    float tw = 120 * k * wide, th = 150 * k, hr = 44 * k;
-    float top = y - th, hy = top - hr * 0.72f;
-    // torso
-    DrawRectangleRounded({x - tw / 2 - 3, top - 3, tw + 6, th + 40}, 0.45f, 8, INK);
-    DrawRectangleRounded({x - tw / 2, top, tw, th + 40}, 0.45f, 8, shirt);
-    DrawRectangleRec({x - 12 * k, top - 8 * k, 24 * k, 20 * k}, ui::shade(skin, 0.9f));
-    if (anger > 0.5f) {   // arms crossed
-        DrawLineEx({x - tw / 2 + 6, top + th * 0.55f}, {x + tw / 2 - 12, top + th * 0.42f}, 14 * k, INK);
-        DrawLineEx({x - tw / 2 + 6, top + th * 0.55f}, {x + tw / 2 - 12, top + th * 0.42f}, 14 * k - 5, ui::shade(shirt, 0.85f));
-        DrawLineEx({x + tw / 2 - 6, top + th * 0.55f}, {x - tw / 2 + 12, top + th * 0.42f}, 14 * k, INK);
-        DrawLineEx({x + tw / 2 - 6, top + th * 0.55f}, {x - tw / 2 + 12, top + th * 0.42f}, 14 * k - 5, shirt);
-    }
-    // head
-    if (style == 3) DrawRectangleRounded({x - hr - 5, hy - hr * 0.2f, 2 * hr + 10, hr * 1.9f}, 0.5f, 6, hair);
-    DrawCircleV({x, hy}, hr + 3, INK);
-    DrawCircleV({x, hy}, hr, skin);
-    if (style == 1 || style == 2 || style == 3) DrawCircleSector({x, hy - 2}, hr + 2, 180, 360, 16, hair);
-    if (style == 2) { DrawCircleV({x, hy - hr - 6 * k}, 15 * k, INK); DrawCircleV({x, hy - hr - 6 * k}, 15 * k - 3, hair); }
-    if (style == 0) DrawRing({x, hy}, hr - 2, hr + 2, 200, 340, 12, hair);
-    if (style == 4) {
-        DrawCircleSector({x, hy - 4}, hr + 4, 180, 360, 16, ui::shade(shirt, 0.7f));
-        DrawRectangleRounded({x - hr - 4, hy - 8, hr * 1.5f, 9 * k}, 0.8f, 4, ui::shade(shirt, 0.55f));
-    }
-    // face
-    float ex = 16 * k, ey = hy + 2 * k;
-    DrawCircleV({x - ex, ey}, 4.5f * k, INK);
-    DrawCircleV({x + ex, ey}, 4.5f * k, INK);
-    float br = anger * 9 * k;
-    DrawLineEx({x - ex - 9 * k, ey - 12 * k - br * 0.3f}, {x - ex + 8 * k, ey - 11 * k + br}, 3.5f * k, INK);
-    DrawLineEx({x + ex + 9 * k, ey - 12 * k - br * 0.3f}, {x + ex - 8 * k, ey - 11 * k + br}, 3.5f * k, INK);
-    if ((L >> 14) & 1) {   // glasses
-        DrawRing({x - ex, ey}, 9 * k, 11 * k, 0, 360, 16, INK);
-        DrawRing({x + ex, ey}, 9 * k, 11 * k, 0, 360, 16, INK);
-        DrawLineEx({x - ex + 10 * k, ey}, {x + ex - 10 * k, ey}, 2, INK);
-    }
-    float my = hy + 22 * k;
-    if (anger > 0.8f) DrawEllipse((int)x, (int)(my + 2 * k), 11 * k, 8 * k, INK);
-    else if (anger > 0.3f) DrawRing({x, my + 12 * k}, 11 * k, 14 * k, 215, 325, 10, INK);
-    else DrawLineEx({x - 10 * k, my}, {x + 10 * k, my}, 3 * k, INK);
 }
 
 void drawTicket(const Ticket& k, const Order* o, Rectangle r, bool selected, float size) {

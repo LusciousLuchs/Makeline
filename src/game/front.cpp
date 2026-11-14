@@ -1,4 +1,4 @@
-// Makeline - the front: the lobby, the counter, the phone, and the order screen.
+// Makeline - at the register: what the customer is saying, and the order screen.
 #include "game.hpp"
 #include <algorithm>
 #include <cmath>
@@ -8,164 +8,18 @@ using namespace pz;
 using ui::INK;
 
 namespace {
-const float COUNTER_Y = 560, SCENE_W = 940;
-
-void bubble(const std::string& s, float x, float y, float size, Color fill = ui::PAPER) {
-    float w = std::min(300.f, ui::textW(s, size) + 4), h = ui::wrap(s, 0, 0, w, size, INK, false);
-    Rectangle r{std::clamp(x - w / 2 - 12, 8.f, SCENE_W - w - 32), y - h - 24, w + 24, h + 16};
-    ui::panel(r, fill, 12, 3, true);
-    DrawTriangle({x - 8, r.y + r.height}, {x, r.y + r.height + 14}, {x + 10, r.y + r.height}, INK);
-    DrawTriangle({x - 4, r.y + r.height - 2}, {x, r.y + r.height + 8}, {x + 6, r.y + r.height - 2}, fill);
-    ui::wrap(s, r.x + 12, r.y + 8, w, size, INK);
-}
-void patienceBar(float x, float y, float w, float p) {
-    DrawRectangleRounded({x - w / 2 - 2, y - 2, w + 4, 12}, 1, 4, INK);
-    Color c = p > 0.5f ? ui::GREEN : p > 0.25f ? ui::YELLOW : ui::RED;
-    DrawRectangleRounded({x - w / 2, y, std::max(4.f, w * std::clamp(p, 0.f, 1.f)), 8}, 1, 4, c);
-}
-
-// where people stand: the line runs back from the register, people waiting for food stand over by the window
-struct Spot { float x, base, k; };
-Spot lineSpot(float slot) { return {300 + slot * 104, COUNTER_Y + 6 - slot * 14, 1.0f - slot * 0.09f}; }
-Spot lobbySpot(size_t i) { return {880 - (float)i * 98, COUNTER_Y - 36 - (i % 2) * 16.f, 0.72f}; }
-
-void scene() {
-    Store& S = G.S;
-    // wall, window, menu board
-    DrawRectangle(0, 64, (int)SCENE_W, 500, {236, 208, 160, 255});
-    DrawRectangle(0, 64, (int)SCENE_W, 26, {214, 66, 50, 255});
-    for (int i = 0; i < 24; i++) DrawRectangle(i * 40, 90, 20, 14, {250, 240, 220, 255});   // a checkered trim
-    float dusk = std::clamp((float)(S.t / SHIFT_LEN), 0.f, 1.f);
-    Rectangle win{520, 150, 380, 250};
-    DrawRectangleRec({win.x - 8, win.y - 8, win.width + 16, win.height + 16}, INK);
-    DrawRectangleGradientV((int)win.x, (int)win.y, (int)win.width, (int)win.height, ui::mix({150, 200, 235, 255}, {40, 40, 90, 255}, dusk), ui::mix({250, 214, 150, 255}, {220, 110, 80, 255}, dusk));
-    DrawCircleV({win.x + 290, win.y + 60 + dusk * 150}, 28, ui::mix({255, 240, 170, 255}, {255, 150, 90, 255}, dusk));
-    DrawRectangle((int)win.x, (int)(win.y + 200), (int)win.width, 50, {70, 70, 80, 255});   // the street
-    DrawRectangle((int)(win.x + 186), (int)win.y, 8, (int)win.height, INK);
-    ui::text("NEPO", win.x + 20, win.y + 16, 30, {255, 255, 255, 120});   // "OPEN", from the inside
-    ui::panel({40, 124, 420, 196}, {50, 60, 56, 255}, 8, 4, true);
-    ui::text("TODAY'S MENU", 250, 134, 26, ui::YELLOW, 1);
-    static const char* MENU[] = {"Small 10\"   7.99", "Medium 12\"   9.99", "Large 14\"   11.99", "X-Large 16\"   13.99"};
-    for (int i = 0; i < 4; i++) ui::text(MENU[i], 64, 172 + i * 30, 22, {240, 236, 220, 255});
-    ui::text("Thin: M, L", 300, 180, 18, {200, 210, 190, 255});
-    ui::text("Pan: M only", 300, 206, 18, {200, 210, 190, 255});
-    ui::text("Toppings +1.50", 300, 240, 18, {200, 210, 190, 255});
-
-    // people waiting for their food stand at the back
-    auto lobby = S.lobby();
-    int clickCust = -1;
-    for (size_t i = 0; i < lobby.size(); i++) {
-        Customer* c = S.cust(lobby[i]);
-        Spot sp = lobbySpot(i);
-        drawCustomer(c->who, sp.x, sp.base, sp.k, 1 - c->patience, 0);
-    }
-    // the line at the register
-    auto line = S.line();
-    Customer* talking = S.talk.active() ? S.cust(S.talk.cust) : nullptr;
-    for (size_t i = line.size(); i-- > 0;) {
-        Customer* c = S.cust(line[i]);
-        float slot = (float)i + (talking && !talking->phone ? 1 : 0);
-        Spot sp = lineSpot(slot);
-        drawCustomer(c->who, sp.x, sp.base, sp.k, 1 - c->patience, 0);
-    }
-    if (talking && !talking->phone) drawCustomer(talking->who, 300, COUNTER_Y + 6, 1.0f, 1 - talking->patience, 0);
-    // people storming out (or leaving happy) slide off to the door
-    for (auto& c : S.custs) if (c.leaving > 0 && c.leaving < 1.6f && !c.phone)
-        drawCustomer(c.who, 500 + c.leaving * 420, COUNTER_Y - 20, 0.8f, c.leftStars >= 4 ? 0.1f : 1.0f, 0);
-
-    // the counter
-    DrawRectangle(0, (int)COUNTER_Y - 4, (int)SCENE_W, 8, INK);
-    DrawRectangle(0, (int)COUNTER_Y, (int)SCENE_W, 26, {222, 214, 200, 255});
-    DrawRectangle(0, (int)COUNTER_Y + 26, (int)SCENE_W, 320, ui::WOOD);
-    for (int i = 0; i < 8; i++) DrawRectangle(i * 124, (int)COUNTER_Y + 26, 4, 320, ui::DKWOOD);
-    DrawRectangle(0, (int)COUNTER_Y + 22, (int)SCENE_W, 5, INK);
-    // the register
-    ui::panel({70, COUNTER_Y - 78, 130, 80}, {70, 74, 84, 255}, 8, 3, false);
-    DrawRectangleRec({84, COUNTER_Y - 66, 102, 40}, {150, 220, 190, 255});
-    ui::text("$", 135, COUNTER_Y - 62, 30, INK, 1);
-    // the phone
-    int ring = S.ringing();
-    bool onPhone = talking && talking->phone;
-    float px = 840, py = COUNTER_Y - 30, jit = ring >= 0 ? std::sin(ui::time * 60) * 4 : 0;
-    Rectangle phone{px - 50, py - 50, 100, 82};
-    ui::panel({px - 44 + jit, py - 26, 88, 54}, {60, 60, 70, 255}, 10, 3, false);
-    if (!onPhone) {
-        DrawRectangleRounded({px - 54 + jit, py - 46, 108, 26}, 1, 6, INK);
-        DrawRectangleRounded({px - 51 + jit, py - 43, 102, 20}, 1, 6, ui::RED);
-    }
-    for (int i = 0; i < 9; i++) DrawCircleV({px - 22 + (i % 3) * 22 + jit, py - 10 + (i / 3) * 12}, 3.5f, {200, 200, 210, 255});
-    if (ring >= 0) {
-        Customer* c = S.cust(ring);
-        float pulse = 0.5f + 0.5f * std::sin(ui::time * 14);
-        ui::text("RING!", px - 78 - pulse * 8, py - 100 - pulse * 6, 30, ui::RED, 1);
-        ui::text("RING!", px + 40 + pulse * 8, py - 124 + pulse * 6, 24, ui::RED, 1);
-        patienceBar(px, py - 64, 90, c->patience);
-        if (!S.talk.active() && ui::hover(phone)) {
-            DrawRectangleRoundedLinesEx({phone.x - 6, phone.y - 6, phone.width + 12, phone.height + 12}, 0.3f, 6, 3, ui::YELLOW);
-            if (ui::pressed && !ui::clickUsed) { ui::clickUsed = true; S.beginTalk(ring); sfx(SFX_CLICK); }
-        }
-    }
-    if (onPhone) {
-        ui::text("ON THE PHONE", px, py - 96, 20, INK, 1);
-        patienceBar(px, py - 68, 90, talking->patience);
-    }
-
-    // tags, bubbles and clicks (drawn over the counter)
-    for (size_t i = 0; i < lobby.size(); i++) {
-        Customer* c = S.cust(lobby[i]);
-        Order* o = S.order(c->order);
-        Spot sp = lobbySpot(i);
-        float x = sp.x, base = sp.base, head = base - 226 * sp.k - 8;
-        char b[32]; snprintf(b, sizeof b, "#%d", c->order);
-        bool ready = o && o->ready && !o->done;
-        Rectangle hit{x - 48, head - 40, 96, base - head - 30};
-        if (ready) {
-            float bounce = std::fabs(std::sin(ui::time * 5)) * 8;
-            ui::panel({x - 50, head - 44 - bounce, 100, 40}, ui::GREEN, 10, 3, true);
-            ui::text(std::string("READY ") + b, x, head - 36 - bounce, 20, ui::PAPER, 1);
-            if (!S.talk.active() && ui::hover(hit)) {
-                DrawRectangleRoundedLinesEx(hit, 0.2f, 6, 3, ui::YELLOW);
-                if (ui::pressed && !ui::clickUsed) { ui::clickUsed = true; clickCust = c->id; }
-            }
-        } else {
-            ui::panel({x - 26, head - 34, 52, 26}, ui::PAPER, 8, 2, false);
-            ui::text(b, x, head - 31, 18, INK, 1);
-        }
-        patienceBar(x, head - 4, 70, c->patience);
-        if (c->barkT > 0 && !ready) bubble(c->bark, x, head - 40, 17);
-    }
-    for (size_t i = 0; i < line.size(); i++) {
-        Customer* c = S.cust(line[i]);
-        Spot sp = lineSpot((float)i + (talking && !talking->phone ? 1 : 0));
-        float x = sp.x, head = sp.base - 226 * sp.k - 20;
-        patienceBar(x, head, 80, c->patience);
-        if (c->barkT > 0) bubble(c->bark, x, head - 8, 17);
-        if (i == 0 && !S.talk.active()) {
-            Rectangle hit{x - 70, head - 10, 140, 250};
-            float bounce = std::fabs(std::sin(ui::time * 4)) * 6;
-            ui::panel({x - 74, head - 62 - bounce, 148, 40}, ui::YELLOW, 10, 3, true);
-            ui::text("TAKE ORDER", x, head - 53 - bounce, 20, INK, 1);
-            if (ui::hover(hit)) {
-                DrawRectangleRoundedLinesEx(hit, 0.2f, 6, 3, ui::YELLOW);
-                if (ui::pressed && !ui::clickUsed) { ui::clickUsed = true; S.beginTalk(c->id); sfx(SFX_CLICK); }
-            }
-        }
-    }
-    if (talking && !talking->phone) patienceBar(300, COUNTER_Y - 280, 80, talking->patience);
-    if (clickCust >= 0) S.handOut(clickCust);
-}
 
 void dialogue() {
     Store& S = G.S;
     Rectangle box{20, 612, 900, 270};
     ui::panel(box, ui::PAPER, 12, 4, true);
     if (!S.talk.active()) {
-        ui::text("THE FRONT", box.x + 24, box.y + 18, 30, INK);
-        float y = box.y + 62;
-        const char* tips[] = {"Click the customer at the register to take their order.", "Click the phone when it rings. They won't wait long.",
-            "Punch in what they say on the order screen, then send it to the makeline.", "When an order's READY, click that customer to hand it over."};
-        for (auto t : tips) { DrawCircleV({box.x + 34, y + 12}, 5, ui::RED); ui::text(t, box.x + 50, y, 22, INK); y += 34; }
-        ui::text("Keys: 1 Front   2 Makeline   3 Oven & cut table   Esc Pause", box.x + 24, box.y + 226, 19, ui::GREY);
+        ui::text("THE REGISTER", box.x + 24, box.y + 18, 30, INK);
+        int next = S.firstInLine();
+        if (next >= 0) {
+            ui::text("Someone's waiting to order.", box.x + 24, box.y + 70, 24, INK);
+            if (ui::button({box.x + 24, box.y + 120, 300, 64}, "TAKE THEIR ORDER", ui::RED, true, 26)) { S.beginTalk(next); sfx(SFX_CLICK); }
+        } else ui::wrap("Nobody at the counter. Your open orders are on the screen. Step back (Esc) and get them made.", box.x + 24, box.y + 70, 640, 22, INK);
         return;
     }
     Customer* c = S.cust(S.talk.cust);
@@ -306,12 +160,12 @@ void pos() {
     for (auto& s : D) total += price(s);
     char b[48]; snprintf(b, sizeof b, "Total  $%.2f", total);
     ui::text(b, x, in.y + in.height - 48, 26, INK);
-    if (ui::button({in.x + in.width - 280, in.y + in.height - 66, 266, 54}, "SEND TO MAKELINE", ui::RED, true, 24)) { S.finishOrder(); sfx(SFX_DING); G.posPart = WHOLE; G.posLevel = NORMAL; }
+    if (ui::button({in.x + in.width - 280, in.y + in.height - 66, 266, 54}, "SEND TO MAKELINE", ui::RED, true, 24)) { S.finishOrder(); sfx(SFX_DING); G.posPart = WHOLE; G.posLevel = NORMAL; setMode(M_WALK); }
 }
 }  // namespace
 
-void frontStation() {
-    scene();
+void registerOverlay() {
     dialogue();
     pos();
+    if (!G.S.talk.active() && ui::button({20, 80, 190, 46}, "Step back (Esc)", ui::CREAM, true, 19)) setMode(M_WALK);
 }

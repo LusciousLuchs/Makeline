@@ -22,6 +22,9 @@ extern bool rdown;                      // right button
 extern float time;                      // seconds since the game started
 extern bool clickUsed;                  // a button already took this frame's click
 
+extern float scale; extern Vector2 offset;   // the 1600x900 canvas on the window
+Vector2 toScreen(Vector2 canvas);
+Vector2 fromScreen(Vector2 screen);
 void loadFonts();
 void beginFrame();                      // reads the mouse (or the test script's)
 void script(const std::string& s);      // "frame:x,y;frame:x,y>x2,y2" clicks and drags for automated runs

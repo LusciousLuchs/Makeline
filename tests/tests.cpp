@@ -86,6 +86,20 @@ int main() {
         CHECK(orders >= 20);
         if (pass == 0) CHECK(avg > 4.0f); else CHECK(avg < 3.0f);
     }
+    {   // reprimands: a bad score at closing is one; three inside a week and you're fired; old ones stop counting
+        Store s;
+        auto close = [&](int day, int stars) { s.day = day; s.dayReviews = {Review{"x", "y", stars, day, {}}}; s.reviews.assign(10, Review{"x", "y", stars, day, {}}); return s.closeDay(); };
+        CHECK(close(1, 5) == 0);
+        CHECK(close(2, 1) == 1);
+        CHECK(close(3, 4) == 0);
+        CHECK(close(4, 2) == 1);
+        CHECK(close(9, 1) == 1);          // day 2's is over a week old by now
+        CHECK(!s.fired);
+        CHECK(close(10, 1) == 2);         // days 4, 9 and 10
+        CHECK(s.fired);
+        Store t2; CHECK(t2.fromJson(s.toJson())); CHECK(t2.fired && t2.reprimands.size() == s.reprimands.size());
+        Store q; q.day = 3; CHECK(q.closeDay() == 0);   // nobody reviewed: nothing to judge
+    }
     {   // a script always names every topping somewhere (or loses one to static)
         for (int k = 0; k < 300; k++) {
             Person who = makePerson(rng);

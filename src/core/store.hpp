@@ -57,6 +57,7 @@ enum EvKind { E_RING, E_DOOR, E_REVIEW, E_OVEN_OUT, E_READY, E_DRIVER, E_STORMED
 struct Event { int kind; int a; std::string text; };
 
 constexpr float OVEN_TIME = 24;
+constexpr float REPRIMAND_BELOW = 3.0f;
 constexpr float SHIFT_LEN = 420;
 
 struct OvenSlot { int pizza; float prog; };
@@ -67,6 +68,8 @@ struct Store {
     float money = 0;
     std::vector<Review> reviews;
     bool guides = true;             // portion guides on the makeline (training wheels)
+    std::vector<int> reprimands;    // the days corporate wrote you up
+    bool fired = false;
 
     // ---- this shift
     double t = 0;
@@ -91,6 +94,10 @@ struct Store {
     void startDay(uint64_t seed);
     void update(float dt);
     float rating() const;           // the last 30 reviews; 0 when there are none yet
+    // closing the books on today: 0 nothing, 1 a reprimand (the score closed under REPRIMAND_BELOW), 2 fired
+    // (three reprimands inside a week). Call once when the day is over.
+    int closeDay();
+    int reprimandsThisWeek() const;
     std::string clock() const;      // "6:42 PM"
 
     // ---- the front

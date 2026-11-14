@@ -13,13 +13,16 @@ using namespace pz;
 using ui::INK;
 
 Game G;
+bool gShotMode = false;
 extern const unsigned char* logoJpg(int* size);   // ui.cpp holds the embedded files
 
 namespace {
 enum Screen { SPLASH, TITLE, PLAY, DAYEND };
 int screen = SPLASH;
 float splashT = 0, reviewScroll = 0;
-bool confirmNew = false, wantQuit = false, shotMode = false;
+bool confirmNew = false, wantQuit = false;
+bool& shotMode = gShotMode;
+int verdict = 0;   // corporate, at closing: 0 fine, 1 a reprimand, 2 fired
 uint64_t seed = 1;
 Texture2D logo{};
 Pizza titlePizza;
@@ -30,11 +33,13 @@ void load() {
     if (shotMode || !FileExists(savePath().c_str())) return;
     char* t = LoadFileText(savePath().c_str());
     if (t) { G.S.fromJson(t); UnloadFileText(t); }
+    if (G.S.fired) G.S = Store{};
 }
 void startShift() {
     G.S.startDay(seed);
-    G.station = ST_FRONT; G.tool = -1; G.pickTicket = -1; G.toasts.clear(); G.paused = G.chart = G.help = false;
+    G.tool = -1; G.pickTicket = -1; G.toasts.clear(); G.paused = G.chart = G.help = false;
     screen = PLAY;
+    worldReset();
 }
 
 void toast(const std::string& text, int stars = 0) {
@@ -62,33 +67,20 @@ void events() {
 
 void topBar() {
     Store& S = G.S;
-    DrawRectangle(0, 0, 1600, 64, INK);
-    int ready = 0;
-    for (int id : S.lobby()) { Customer* c = S.cust(id); Order* o = c ? S.order(c->order) : nullptr; if (o && o->ready) ready++; }
-    int alerts[3] = {(int)S.line().size() + ready + (S.ringing() >= 0 ? 1 : 0), (int)S.openTickets().size(), (int)S.exitQ.size()};
-    static const char* NAMES[] = {"1  FRONT", "2  MAKELINE", "3  OVEN & CUT"};
-    for (int i = 0; i < 3; i++) {
-        Rectangle r{14 + i * 232.f, 8, 220, 44};
-        bool urgent = i == 0 && (S.ringing() >= 0 || ready > 0);
-        Color fill = G.station == i ? ui::CREAM : Color{96, 78, 68, 255};
-        if (G.station != i && urgent && std::fmod(ui::time, 0.6f) < 0.3f) fill = ui::RED;
-        if (ui::button(r, NAMES[i], fill, true, 22)) { G.station = i; sfx(SFX_CLICK); }
-        if (alerts[i] > 0) {
-            DrawCircleV({r.x + r.width - 8, r.y + 4}, 15, INK);
-            DrawCircleV({r.x + r.width - 8, r.y + 4}, 12, urgent ? ui::RED : ui::YELLOW);
-            ui::text(std::to_string(alerts[i]), r.x + r.width - 8, r.y - 6, 19, urgent ? ui::PAPER : INK, 1);
-        }
-    }
+    DrawRectangle(-2000, 0, 5600, 64, INK);
+    ui::text("MAKELINE", 20, 16, 30, ui::RED);
     char b[64];
     snprintf(b, sizeof b, "Day %d", S.day);
-    ui::text(b, 760, 18, 26, ui::CREAM);
-    ui::text(S.closed ? "CLOSED - finish up" : S.clock(), 860, 18, 26, S.closed ? ui::RED : ui::YELLOW);
+    ui::text(b, 240, 18, 26, ui::CREAM);
+    ui::text(S.closed ? "CLOSED - finish up" : S.clock(), 340, 18, 26, S.closed ? ui::RED : ui::YELLOW);
     float rt = S.rating();
     ui::stars(1150, 18, 28, rt, {110, 92, 82, 255});
     if (rt > 0) snprintf(b, sizeof b, "%.1f", rt); else snprintf(b, sizeof b, "new");
     ui::text(b, 1308, 18, 26, ui::CREAM);
     snprintf(b, sizeof b, "$%.2f", S.money);
     ui::text(b, 1586, 18, 26, {170, 230, 170, 255}, 2);
+    int rp = S.reprimandsThisWeek();
+    if (rp) { snprintf(b, sizeof b, "Reprimands: %d of 3", rp); ui::text(b, 1120, 20, 22, ui::RED, 2); }
 }
 
 void drawToasts() {
@@ -128,17 +120,23 @@ void helpPanel() {
 
 void titleScreen() {
     Store& S = G.S;
-    ClearBackground(ui::RED);
-    for (int i = 0; i < 20; i++) for (int j = 0; j < 12; j++) if ((i + j) & 1) DrawRectangle(i * 80, j * 80, 80, 80, {204, 58, 44, 255});
-    // a pizza the size of the screen, slowly turning
-    Pizza p = titlePizza;
-    float a = ui::time * 0.05f, cs = std::cos(a), sn = std::sin(a);
-    for (auto& b : p.bits) { float x = b.x * cs - b.y * sn, y = b.x * sn + b.y * cs; b.x = x; b.y = y; b.rot += a; }
-    drawPizza(p, {1180, 470}, 380);
+    EndMode2D();
+    ClearBackground({196, 58, 44, 255});
+    {   // a pizza the size of the screen, slowly turning
+        Camera3D c{};
+        c.position = {-0.16f, 0.62f, 0.2f}; c.target = {-0.16f, 0, 0.02f}; c.up = {0, 0, -1}; c.fovy = 45; c.projection = CAMERA_PERSPECTIVE;
+        g3::begin(c);
+        for (int i = -8; i < 8; i++) for (int j = -5; j < 5; j++) g3::quadUp({i * 0.12f, -0.001f, j * 0.12f}, 0.12f, 0.12f, (i + j) & 1 ? Color{214, 66, 50, 255} : Color{226, 82, 62, 255});
+        g3::cyl({0, 0, 0}, 0.245f, 0.006f, {206, 170, 120, 255}, 32);
+        g3::Frame f{{0, 0.006f, 0}, ui::time * 4};
+        g3::pizza(titlePizza, f, 0, 0);
+        g3::end();
+    }
+    BeginMode2D(Camera2D{ui::offset, {0, 0}, 0, ui::scale});
     Rectangle card{90, 110, 620, 680};
     ui::panel(card, ui::CREAM, 18, 5, true);
     ui::text("MAKELINE", card.x + 40, card.y + 30, 96, ui::DKRED);
-    ui::text("a pizza shop game", card.x + 46, card.y + 126, 28, INK);
+    ui::text("you're the manager. try to stay that way.", card.x + 46, card.y + 126, 26, INK);
     float rt = S.rating();
     char b[96];
     if (rt > 0) {
@@ -180,7 +178,7 @@ void titleScreen() {
 
 void dayEnd() {
     Store& S = G.S;
-    ClearBackground({58, 44, 40, 255});
+    DrawRectangle(-2000, -2000, 5600, 4900, {58, 44, 40, 255});
     Rectangle card{100, 60, 560, 780};
     ui::panel(card, ui::CREAM, 16, 5, true);
     char b[128];
@@ -203,17 +201,33 @@ void dayEnd() {
     ui::text("Store rating", card.x + 40, y, 26, INK);
     ui::stars(card.x + 300, y, 30, S.rating()); snprintf(b, sizeof b, "%.1f", S.rating()); ui::text(S.rating() > 0 ? b : "new", card.x + card.width - 40, y, 26, INK, 2);
     y += 62;
-    const char* verdict = avg == 0 ? "Nobody said anything. Take it." : avg >= 4.5f ? "Corporate would like a word. A nice one, for once." : avg >= 3.5f ? "A decent night. The regulars will be back." :
-        avg >= 2.5f ? "Rough. People talk, you know." : "A disaster. The franchise owner is 'concerned'.";
-    y += ui::wrap(verdict, card.x + 40, y, card.width - 80, 22, ui::DKRED) + 10;
-    if (S.day == 1 && S.guides) ui::wrap("From tomorrow the portion guides come off. Learn the chart. (You can turn them back on from the pause menu.)", card.x + 40, y, card.width - 80, 19, {90, 74, 64, 255});
-    if (ui::button({card.x + 40, card.y + card.height - 100, 300, 70}, "NEXT DAY", ui::RED, true, 30)) {
-        if (S.day == 1) S.guides = false;
-        S.day++; save(); sfx(SFX_DING); startShift();
+    if (verdict) {   // the letter from corporate
+        Rectangle letter{card.x + 30, y - 8, card.width - 60, 196};
+        DrawRectangleRec({letter.x + 4, letter.y + 5, letter.width, letter.height}, ui::SHADOW);
+        DrawRectangleRec(letter, ui::PAPER);
+        DrawRectangleLinesEx(letter, 3, ui::DKRED);
+        ui::text(verdict == 2 ? "NOTICE OF TERMINATION" : "WRITTEN REPRIMAND", letter.x + 16, letter.y + 12, 26, ui::DKRED);
+        if (verdict == 2) snprintf(b, sizeof b, "Three reprimands in one week. The store closed today at %.1f stars. Hand in your keys. You're fired.", S.rating());
+        else snprintf(b, sizeof b, "The store closed today at %.1f stars. Under %.1f is not acceptable. Reprimand %d of 3 this week.", S.rating(), REPRIMAND_BELOW, S.reprimandsThisWeek());
+        ui::wrap(b, letter.x + 16, letter.y + 50, letter.width - 32, 20, INK);
+        ui::text("- Regional Office", letter.x + letter.width - 16, letter.y + letter.height - 30, 18, ui::GREY, 2);
+    } else {
+        const char* note = avg == 0 ? "Nobody said anything. Take it." : avg >= 4.5f ? "Corporate would like a word. A nice one, for once." : avg >= 3.5f ? "A decent night. The regulars will be back." :
+            "Rough night, but the store's score held. This time.";
+        y += ui::wrap(note, card.x + 40, y, card.width - 80, 22, ui::DKRED) + 10;
+        if (S.day == 1 && S.guides) ui::wrap("From tomorrow the portion guides come off. Learn the chart. (You can turn them back on from the pause menu.)", card.x + 40, y, card.width - 80, 19, {90, 74, 64, 255});
     }
-    if (ui::button({card.x + 356, card.y + card.height - 100, 164, 70}, "Clock out", {214, 204, 186, 255}, true, 22)) {
-        if (S.day == 1) S.guides = false;
-        S.day++; save(); screen = TITLE;
+    if (verdict == 2) {
+        if (ui::button({card.x + 40, card.y + card.height - 100, 480, 70}, "START OVER AT A NEW STORE", ui::RED, true, 26)) { G.S = Store{}; save(); verdict = 0; screen = TITLE; }
+    } else {
+        if (ui::button({card.x + 40, card.y + card.height - 100, 300, 70}, "NEXT DAY", ui::RED, true, 30)) {
+            if (S.day == 1) S.guides = false;
+            S.day++; save(); sfx(SFX_DING); startShift();
+        }
+        if (ui::button({card.x + 356, card.y + card.height - 100, 164, 70}, "Clock out", {214, 204, 186, 255}, true, 22)) {
+            if (S.day == 1) S.guides = false;
+            S.day++; save(); screen = TITLE;
+        }
     }
     // the reviews, newest first
     Rectangle list{700, 60, 800, 780};
@@ -246,43 +260,52 @@ void pauseMenu() {
     Rectangle box{560, 220, 480, 470};
     ui::panel(box, ui::CREAM, 16, 5, true);
     ui::text("PAUSED", box.x + box.width / 2, box.y + 26, 48, ui::DKRED, 1);
-    if (ui::button({box.x + 50, box.y + 110, 380, 62}, "Back to work", ui::RED, true, 26)) G.paused = false;
+    if (ui::button({box.x + 50, box.y + 110, 380, 62}, "Back to work", ui::RED, true, 26)) { G.paused = false; setMode(G.mode); }
     if (ui::button({box.x + 50, box.y + 190, 380, 54}, S.guides ? "Portion guides: ON" : "Portion guides: OFF", S.guides ? ui::GREEN : Color{214, 204, 186, 255}, true, 22)) S.guides = !S.guides;
     if (ui::button({box.x + 50, box.y + 260, 380, 54}, "How to play", ui::YELLOW, true, 22)) G.help = true;
-    if (ui::button({box.x + 50, box.y + 330, 380, 54}, "Walk out (lose today)", {214, 204, 186, 255}, true, 22)) { G.paused = false; screen = TITLE; }
+    if (ui::button({box.x + 50, box.y + 330, 380, 54}, "Walk out (lose today)", {214, 204, 186, 255}, true, 22)) { G.paused = false; G.mode = M_WALK; screen = TITLE; }
     ui::text("F11 fullscreen", box.x + box.width / 2, box.y + 414, 18, ui::GREY, 1);
     if (G.help) helpPanel();
 }
 
 void play(float dt) {
     Store& S = G.S;
-    if (IsKeyPressed(KEY_ESCAPE)) { if (G.help) G.help = false; else if (G.chart) G.chart = false; else G.paused = !G.paused; }
+    if (IsKeyPressed(KEY_ESCAPE)) {
+        if (G.help) G.help = false;
+        else if (G.chart) G.chart = false;
+        else if (G.paused) { G.paused = false; setMode(G.mode); }
+        else if (G.mode != M_WALK) setMode(M_WALK);
+        else { G.paused = true; if (!shotMode) EnableCursor(); }
+    }
     if (!G.paused) {
-        if (IsKeyPressed(KEY_ONE)) G.station = ST_FRONT;
-        if (IsKeyPressed(KEY_TWO)) G.station = ST_MAKE;
-        if (IsKeyPressed(KEY_THREE)) G.station = ST_OVEN;
-        if (IsKeyPressed(KEY_TAB) && G.station == ST_MAKE && !G.chart) G.chart = true;
+        if (IsKeyPressed(KEY_TAB) && G.mode == M_MAKE) G.chart = !G.chart;
         S.update(dt);
         events();
         for (auto& t : G.toasts) t.age += dt;
         G.toasts.erase(std::remove_if(G.toasts.begin(), G.toasts.end(), [](const Toast& t) { return t.age > 7; }), G.toasts.end());
     }
     audioUpdate(!G.paused && S.ringing() >= 0);
+    worldUpdate(dt);
+    EndMode2D();
+    ClearBackground({30, 24, 22, 255});
+    worldDraw();
+    BeginMode2D(Camera2D{ui::offset, {0, 0}, 0, ui::scale});
     bool block = G.paused || G.chart;
     Vector2 keepM = ui::M; bool kp = ui::pressed, kd = ui::down;
     if (block) { ui::pressed = ui::down = false; ui::M = {-999, -999}; }   // nothing underneath takes clicks
-    if (G.station == ST_FRONT) frontStation(); else if (G.station == ST_MAKE) makeStation(); else ovenStation();
+    worldHud();
+    if (G.mode == M_REGISTER) registerOverlay(); else if (G.mode == M_MAKE) makeOverlay(); else if (G.mode == M_CUT) cutOverlay();
     topBar();
     drawToasts();
     ui::M = keepM; ui::pressed = kp; ui::down = kd;
     if (G.chart && !G.paused) portionChart();
     if (G.paused) pauseMenu();
-    if (S.dayOver && !G.paused) { reviewScroll = 0; screen = DAYEND; sfx(SFX_DOOR); }
+    if (S.dayOver && !G.paused) { reviewScroll = 0; verdict = S.closeDay(); save(); screen = DAYEND; sfx(verdict ? SFX_BAD : SFX_DOOR); if (!shotMode) EnableCursor(); }
 }
 }  // namespace
 
 int main(int argc, char** argv) {
-    const char* shot = nullptr; int frames = 40, station = -1; float warm = 0, care = 1; bool demo = false;
+    const char* shot = nullptr, *at = nullptr; int frames = 40, station = -1; float warm = 0, care = 1; bool demo = false;
     std::string show;
     seed = (uint64_t)time(nullptr);
     for (int i = 1; i < argc; i++) {
@@ -295,6 +318,7 @@ int main(int argc, char** argv) {
         else if (arg("--day")) G.S.day = atoi(argv[++i]);
         else if (arg("--seed")) seed = (uint64_t)atoll(argv[++i]);
         else if (arg("--screen")) show = argv[++i];
+        else if (arg("--at")) at = argv[++i];
         else if (arg("--script")) ui::script(argv[++i]);
         else if (!strcmp(argv[i], "--demo")) demo = true;
         else if (!strcmp(argv[i], "--noguides")) G.S.guides = false;
@@ -308,8 +332,7 @@ int main(int argc, char** argv) {
     SetTargetFPS(60);
     if (!shotMode) { MaximizeWindow(); audioInit(); }
     ui::loadFonts();
-    RenderTexture2D canvas = LoadRenderTexture((int)ui::W, (int)ui::H);
-    SetTextureFilter(canvas.texture, TEXTURE_FILTER_BILINEAR);
+    g3::init();
     {
         int n = 0; const unsigned char* d = logoJpg(&n);
         Image im = LoadImageFromMemory(".jpg", d, n);
@@ -348,11 +371,12 @@ int main(int argc, char** argv) {
                 for (int i = 0; i < 240; i++) S.update(1 / 30.f);
                 S.events.clear();
             }
-            if (station >= 0) G.station = station;
+            if (station >= 0) setMode(station);
+            if (at) sscanf(at, "%f,%f,%f,%f", &G.px, &G.pz, &G.yaw, &G.pitch);
             if (show == "chart") G.chart = true;
             if (show == "pause") G.paused = true;
             if (show == "help") G.help = G.paused = true;
-            if (show == "dayend") { while (!G.S.dayOver) { G.S.update(1 / 30.f); botStep(G.S, 1 / 30.f, care, br); } G.S.events.clear(); screen = DAYEND; }
+            if (show == "dayend") { while (!G.S.dayOver) { G.S.update(1 / 30.f); botStep(G.S, 1 / 30.f, care, br); } G.S.events.clear(); verdict = G.S.closeDay(); screen = DAYEND; }
         }
     }
 
@@ -361,11 +385,11 @@ int main(int argc, char** argv) {
         float dt = shotMode ? 1 / 60.f : std::min(GetFrameTime(), 0.05f);
         if (IsKeyPressed(KEY_F11)) ToggleBorderlessWindowed();
         ui::beginFrame();
-        BeginTextureMode(canvas);
-        ClearBackground(ui::CREAM);
+        BeginDrawing();
+        ClearBackground({16, 16, 18, 255});
+        BeginMode2D(Camera2D{ui::offset, {0, 0}, 0, ui::scale});
         if (screen == SPLASH) {
             splashT += dt;
-            ClearBackground({16, 16, 18, 255});
             float a = std::min({1.f, splashT / 0.5f, (2.6f - splashT) / 0.5f});
             float w = 900, h = w * logo.height / std::max(1, logo.width);
             DrawTexturePro(logo, {0, 0, (float)logo.width, (float)logo.height}, {800 - w / 2, 450 - h / 2, w, h}, {0, 0}, 0, Fade(WHITE, std::max(0.f, a)));
@@ -373,15 +397,10 @@ int main(int argc, char** argv) {
         } else if (screen == TITLE) titleScreen();
         else if (screen == PLAY) play(dt);
         else dayEnd();
-        EndTextureMode();
-        BeginDrawing();
-        ClearBackground(BLACK);
-        float sc = std::min(GetScreenWidth() / ui::W, GetScreenHeight() / ui::H);
-        DrawTexturePro(canvas.texture, {0, 0, ui::W, -ui::H}, {(GetScreenWidth() - ui::W * sc) / 2, (GetScreenHeight() - ui::H * sc) / 2, ui::W * sc, ui::H * sc}, {0, 0}, 0, WHITE);
+        EndMode2D();
         EndDrawing();
         if (shotMode && ++frame >= frames) {
-            Image im = LoadImageFromTexture(canvas.texture);
-            ImageFlipVertical(&im);
+            Image im = LoadImageFromScreen();
             ExportImage(im, shot);
             UnloadImage(im);
             break;

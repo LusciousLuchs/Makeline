@@ -13,7 +13,10 @@ namespace ui {
 
 Vector2 M{0, 0};
 bool pressed = false, down = false, released = false, rdown = false, clickUsed = false;
-float time = 0;
+float time = 0, scale = 1;
+Vector2 offset{0, 0};
+Vector2 toScreen(Vector2 c) { return {c.x * scale + offset.x, c.y * scale + offset.y}; }
+Vector2 fromScreen(Vector2 p) { return {(p.x - offset.x) / scale, (p.y - offset.y) / scale}; }
 
 namespace {
 Font fBig{}, fSmall{};
@@ -47,6 +50,8 @@ void script(const std::string& s) {
 
 void beginFrame() {
     time = (float)GetTime();
+    scale = std::min(GetScreenWidth() / W, GetScreenHeight() / H);
+    offset = {(GetScreenWidth() - W * scale) / 2, (GetScreenHeight() - H * scale) / 2};
     clickUsed = false;
     gFrame++;
     if (scripted) {   // automated runs: clicks last 2 frames, drags 12
@@ -60,10 +65,7 @@ void beginFrame() {
         }
         return;
     }
-    float sc = std::min(GetScreenWidth() / W, GetScreenHeight() / H);
-    float ox = (GetScreenWidth() - W * sc) / 2, oy = (GetScreenHeight() - H * sc) / 2;
-    Vector2 m = GetMousePosition();
-    M = {(m.x - ox) / sc, (m.y - oy) / sc};
+    M = fromScreen(GetMousePosition());
     pressed = IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
     down = IsMouseButtonDown(MOUSE_BUTTON_LEFT);
     released = IsMouseButtonReleased(MOUSE_BUTTON_LEFT);
