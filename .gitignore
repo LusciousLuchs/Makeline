@@ -1,0 +1,6 @@
+build/
+build-*/
+*.exe
+*.o
+*.obj
+makeline_save.json
