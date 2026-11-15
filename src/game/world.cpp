@@ -53,7 +53,7 @@ Camera3D wanted() {
         c.position = {G.px, EYE, G.pz};
         float cp = std::cos(G.pitch);
         c.target = {G.px + std::sin(G.yaw) * cp, EYE + std::sin(G.pitch), G.pz + std::cos(G.yaw) * cp};
-        c.fovy = 68;
+        c.fovy = G.fov;
     }
     return c;
 }
@@ -217,8 +217,8 @@ void worldUpdate(float dt) {
     if (G.mode == M_WALK && !G.paused) {
         if (!gShotMode) {
             Vector2 md = GetMouseDelta();
-            G.yaw -= md.x * 0.0026f;
-            G.pitch = std::clamp(G.pitch - md.y * 0.0026f, -1.3f, 1.2f);
+            G.yaw -= md.x * 0.0026f * G.sens;
+            G.pitch = std::clamp(G.pitch - md.y * 0.0026f * G.sens, -1.3f, 1.2f);
         }
         float f = (IsKeyDown(KEY_W) ? 1 : 0) - (IsKeyDown(KEY_S) ? 1 : 0), s = (IsKeyDown(KEY_D) ? 1 : 0) - (IsKeyDown(KEY_A) ? 1 : 0);
         float len = std::sqrt(f * f + s * s);

@@ -67,7 +67,7 @@ bool commandFromJson(const std::string& text, Command& out) {
 }
 
 bool apply(Store& s, const Command& c) {
-    if (s.dayOver) return false;
+    if (s.dayOver || c.player < 0 || c.player >= MAX_PLAYERS) return false;
     switch (c.type) {
         case CMD_TAKE_ORDER: return s.beginTalk(c.a);
         case CMD_ASK_REPEAT: if (!s.talk.active()) return false; s.askRepeat(); return true;

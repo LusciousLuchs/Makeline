@@ -5,6 +5,8 @@
 
 namespace g3 {
 
+extern bool shadows;        // soft contact shadows under things
+extern float brightness;    // 0.7 to 1.3
 void init();
 void begin(const Camera3D& cam);     // lit 3D drawing from here...
 void end();                          // ...to here

@@ -1,5 +1,12 @@
 # Makeline: what's new
 
+## 0.3.1-alpha
+
+- **Settings menu** from the title screen and the pause menu: video (fullscreen, vsync, frame limit, field of view,
+  brightness), audio (master and effects volume), graphics (quality, anti-aliasing, soft shadows) and game (mouse
+  sensitivity, strong language, helper HUD, portion guides). Your choices are saved.
+- Planned: co-op for up to 8 players. The groundwork now allows eight player numbers.
+
 ## 0.3.0-alpha
 
 - **Maximum immersion.** No top bar, no hints, no patience bars in first person. The time, your rating and the

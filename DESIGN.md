@@ -211,14 +211,27 @@ Every finished or failed order is judged against what the customer **actually** 
 - **Self-updating:** the game checks the repository's newest release at start, downloads and installs it.
 - One save: day, money, reviews, reprimands, staff.
 
-## Multiplayer (planned)
+## Multiplayer (planned): co-op for up to 8
 
-Co-op: friends run the shop together, each taking a job (register, makeline, oven and cut table, driver, or manager).
-**Groundwork is in:** every player action is a `Command` (src/core/commands.hpp). The plan is host-authoritative: one
-machine runs the shop and applies everyone's commands in order, and sends the results back. Two copies of the shop
-fed the same commands stay identical (tested), which is what makes this practical.
-Still to do: a network layer (sockets, joining by code), several makelines and cut tables, per-player cameras and
-voices, who owns which station, and how staff AI fills the jobs nobody is playing. Open: how many players (2 to 4?).
+Up to **eight people run one shop together**, each taking a job: register (two can work the counter and phones at
+once), the makeline (up to three), the oven and cut table (up to two), drivers, and the manager. The store, its
+reviews and its reprimands are shared: if the shop goes under, everyone is out.
+
+- **Host-authoritative.** One machine runs the shop and applies everyone's actions in order, and sends back the
+  results. **Groundwork is in:** every player action is a `Command` (src/core/commands.hpp) with a player number 0 to 7,
+  and two copies of the shop fed the same commands stay identical (tested).
+- **Scaling.** More players means more customers: arrivals scale with the number of people working, and staff the
+  players aren't covering are still run by the game's own crew.
+- **Still to do:** the network layer (sockets, joining by code or invite), several makeline benches and cut tables
+  (the shop has one of each today), who sits at which station, a camera and a terminal per player, and talking to each
+  other (voice or text).
+- **Open:** does the manager role belong to one player (they take the reprimands and do the hiring) or is it shared?
+
+## Settings
+
+Video (fullscreen, vsync, frame limit, field of view, brightness), Audio (master, effects), Graphics (a quality preset,
+anti-aliasing, soft shadows) and Game (mouse sensitivity, strong language, helper HUD, portion guides). Reachable from
+the title screen and the pause menu, saved in `makeline_settings.json`.
 
 ## Later
 

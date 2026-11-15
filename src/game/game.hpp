@@ -40,6 +40,11 @@ struct Game {
     bool paused = false, help = false;
     int posTab = 2;                      // the order terminal's tab: 0 customer, 1 greeting, 2 pizzas
     std::vector<pz::Command> cmdLog;     // every player action, in order (the seed of a multiplayer log)
+    // settings (saved in makeline_settings.json)
+    float master = 0.8f, sfxVol = 1.0f;   // audio
+    float fov = 68, sens = 1.0f, bright = 1.0f;
+    bool vsync = true, fullscreen = false, msaa = true, shadows = true;
+    int fpsCap = 60;                      // 0 = no limit
     bool hud = false;                    // the helper HUD (top bar, hints, patience bars): off for maximum immersion
     bool skipping = false;               // the shop is empty: time runs fast
     bool office = false; int officeTab = 0;   // the manager's office (staff, hiring, the delivery map)

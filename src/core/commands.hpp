@@ -13,6 +13,8 @@
 
 namespace pz {
 
+constexpr int MAX_PLAYERS = 8;   // co-op: up to eight people running one shop (0 is the host)
+
 enum CmdType {
     CMD_TAKE_ORDER,      // a: customer id               start talking to them (the phone, or the next one in line)
     CMD_ASK_REPEAT,      //                               "could you repeat that?"
@@ -39,7 +41,7 @@ enum CmdType {
 
 struct Command {
     int type = CMD_N;
-    int player = 0;                  // who sent it (0 = the host)
+    int player = 0;                  // who sent it, 0 to MAX_PLAYERS - 1 (0 = the host)
     int a = 0, b = 0, c = 0;
     float x = 0, y = 0, z = 0, w = 0;
     std::string text;                // a payload, as JSON

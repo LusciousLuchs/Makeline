@@ -251,6 +251,7 @@ int main() {
         CHECK(sent > 200 && A.orders.size() > 5);
         printf("multiplayer groundwork: %d commands (%d refused), %d orders, both copies end at %s\n", sent, refused, (int)A.orders.size(), digest(A).c_str());
         Command junk;
+        { Store z; z.forceStart = 17 * 60; z.startDay(1); Command w; w.type = CMD_TRASH_BENCH; w.player = MAX_PLAYERS; CHECK(!apply(z, w)); w.player = -1; CHECK(!apply(z, w)); }   // a ninth player doesn't exist
         CHECK(!commandFromJson("{\"t\": 9999}", junk)); CHECK(!commandFromJson("nonsense", junk));
         CHECK(specsFromJson("[{\"size\": 99, \"items\": [[3, 0, 1]]}]")[0].items.size() == 1);   // junk is clamped, never trusted
     }

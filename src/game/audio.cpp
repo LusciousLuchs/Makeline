@@ -51,11 +51,12 @@ void audioInit() {
 void sfx(int which) {
     if (!gOn || which < 0 || which >= SFX_N) return;
     if (which == SFX_TALK || which == SFX_PLOP) SetSoundPitch(gS[which], 0.85f + (rand() % 100) / 300.f);
+    SetSoundVolume(gS[which], G.sfxVol);
     PlaySound(gS[which]);
 }
 void audioUpdate(bool ringing) {
     if (!gOn) return;
     gRingT -= GetFrameTime();
-    if (ringing && gRingT <= 0) { PlaySound(gS[SFX_RING]); gRingT = 1.9f; }
+    if (ringing && gRingT <= 0) { SetSoundVolume(gS[SFX_RING], G.sfxVol); PlaySound(gS[SFX_RING]); gRingT = 1.9f; }
     if (!ringing) { if (IsSoundPlaying(gS[SFX_RING])) StopSound(gS[SFX_RING]); gRingT = 0; }
 }

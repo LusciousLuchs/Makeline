@@ -24,6 +24,7 @@ enum Screen { SPLASH, EULA, TITLE, PLAY, DAYEND };
 std::string eulaAgreed;      // a fingerprint of the agreement the player accepted
 bool eulaFromTitle = false;  // reading it again from the title (nothing to agree to)
 float eulaScroll = 0;
+bool showSettings = false;
 int screen = SPLASH;
 float splashT = 0, reviewScroll = 0;
 bool confirmNew = false, wantQuit = false;
@@ -47,6 +48,8 @@ void saveSettings() {
     if (shotMode) return;
     nlohmann::json j;
     j["eulaAgreed"] = eulaAgreed; j["strongLanguage"] = pz::strongLanguage; j["hud"] = G.hud;
+    j["master"] = G.master; j["sfx"] = G.sfxVol; j["fov"] = G.fov; j["sens"] = G.sens; j["bright"] = G.bright;
+    j["vsync"] = G.vsync; j["msaa"] = G.msaa; j["shadows"] = G.shadows; j["fpsCap"] = G.fpsCap;
     std::string t = j.dump(1);
     SaveFileText(settingsPath().c_str(), (char*)t.c_str());
 }
@@ -60,6 +63,9 @@ void loadSettings() {
     eulaAgreed = j.value("eulaAgreed", std::string());
     pz::strongLanguage = j.value("strongLanguage", true);
     G.hud = j.value("hud", false);
+    G.master = std::clamp(j.value("master", 0.8f), 0.f, 1.f); G.sfxVol = std::clamp(j.value("sfx", 1.0f), 0.f, 1.f);
+    G.fov = std::clamp(j.value("fov", 68.f), 55.f, 100.f); G.sens = std::clamp(j.value("sens", 1.0f), 0.3f, 3.f); G.bright = std::clamp(j.value("bright", 1.0f), 0.7f, 1.3f);
+    G.vsync = j.value("vsync", true); G.msaa = j.value("msaa", true); G.shadows = j.value("shadows", true); G.fpsCap = j.value("fpsCap", 60);
 }
 void load() {
     if (shotMode || !FileExists(savePath().c_str())) return;
@@ -192,7 +198,8 @@ void titleScreen() {
         if (ui::button({card.x + 46, y, 528, 84}, b, ui::RED, true, 36)) { sfx(SFX_DING); startShift(); }
         if (ui::button({card.x + 46, y + 110, 256, 58}, "How to play", ui::YELLOW, true, 24)) G.help = true;
         if (ui::button({card.x + 318, y + 110, 256, 58}, "Start over", {214, 204, 186, 255}, S.day > 1 || !S.reviews.empty(), 24)) confirmNew = true;
-        if (ui::button({card.x + 46, y + 190, 528, 58}, "Quit", {214, 204, 186, 255}, true, 24)) wantQuit = true;
+        if (ui::button({card.x + 46, y + 190, 256, 58}, "Settings", {226, 214, 190, 255}, true, 24)) showSettings = true;
+        if (ui::button({card.x + 318, y + 190, 256, 58}, "Quit", {214, 204, 186, 255}, true, 24)) wantQuit = true;
     } else {
         ui::wrap("Start over from day 1? Your reviews and money go in the bin.", card.x + 46, y, 528, 26, INK);
         if (ui::button({card.x + 46, y + 110, 256, 58}, "Yes, start over", ui::RED, true, 24)) { G.S = Store{}; save(); confirmNew = false; }
@@ -309,6 +316,102 @@ void dayEnd() {
     else if (ry < bottom - 200 && reviewScroll > 0) reviewScroll = std::max(0.f, reviewScroll - 30);
 }
 
+// ---- settings: video, audio, graphics and the game itself
+int settingsTab = 0;
+const void* dragging = nullptr;
+
+void applySettings() {
+    g3::shadows = G.shadows;
+    g3::brightness = G.bright;
+    if (shotMode) return;
+    SetMasterVolume(G.master);
+    if (G.vsync) SetWindowState(FLAG_VSYNC_HINT); else ClearWindowState(FLAG_VSYNC_HINT);
+    SetTargetFPS(G.fpsCap);
+}
+bool slider(Rectangle r, float& v, float lo, float hi, const char* label, const char* fmt, float shownScale = 1) {
+    char b[32]; snprintf(b, sizeof b, fmt, v * shownScale);
+    ui::text(label, r.x, r.y - 30, 22, INK);
+    ui::text(b, r.x + r.width, r.y - 30, 22, ui::DKRED, 2);
+    DrawRectangleRounded({r.x, r.y + 8, r.width, 10}, 1, 4, INK);
+    float u = std::clamp((v - lo) / (hi - lo), 0.f, 1.f);
+    DrawRectangleRounded({r.x + 2, r.y + 10, std::max(6.f, (r.width - 4) * u), 6}, 1, 4, ui::YELLOW);
+    bool changed = false;
+    Rectangle hit{r.x - 10, r.y - 6, r.width + 20, 38};
+    if (ui::pressed && ui::hover(hit)) dragging = &v;
+    if (!ui::down) dragging = nullptr;
+    if (dragging == &v) { v = lo + std::clamp((ui::M.x - r.x) / r.width, 0.f, 1.f) * (hi - lo); changed = true; }
+    DrawCircleV({r.x + r.width * u, r.y + 13}, 13, INK);
+    DrawCircleV({r.x + r.width * u, r.y + 13}, 10, ui::CREAM);
+    return changed;
+}
+bool toggle(Rectangle r, const char* label, bool on, const char* note = "") {
+    ui::text(label, r.x, r.y + 12, 24, INK);
+    if (note[0]) ui::text(note, r.x, r.y + 42, 17, ui::GREY);
+    return ui::button({r.x + r.width - 160, r.y, 160, 50}, on ? "ON" : "OFF", on ? ui::GREEN : Color{214, 204, 186, 255}, true, 24);
+}
+void settingsPanel() {
+    DrawRectangle(-2000, -2000, 5600, 4900, {20, 14, 12, 190});
+    Rectangle box{300, 90, 1000, 720};
+    ui::panel(box, ui::CREAM, 16, 5, true);
+    ui::text("SETTINGS", box.x + 36, box.y + 22, 44, ui::DKRED);
+    static const char* TABS[] = {"Video", "Audio", "Graphics", "Game"};
+    for (int i = 0; i < 4; i++)
+        if (ui::button({box.x + 330 + i * 160.f, box.y + 24, 150, 50}, TABS[i], settingsTab == i ? ui::YELLOW : Color{226, 214, 190, 255}, true, 22)) settingsTab = i;
+    float x = box.x + 60, w = box.width - 120, y = box.y + 130;
+    bool changed = false;
+    if (settingsTab == 0) {   // video
+        if (toggle({x, y, w, 50}, "Fullscreen", IsWindowState(FLAG_BORDERLESS_WINDOWED_MODE) || IsWindowFullscreen(), "Also F11")) { ToggleBorderlessWindowed(); }
+        y += 90;
+        if (toggle({x, y, w, 50}, "Vertical sync", G.vsync, "Stops screen tearing")) { G.vsync = !G.vsync; changed = true; }
+        y += 90;
+        {
+            ui::text("Frame limit", x, y + 12, 24, INK);
+            static const int CAPS[] = {30, 60, 120, 144, 0};
+            const char* name = G.fpsCap == 0 ? "No limit" : nullptr;
+            char nb[24]; if (!name) { snprintf(nb, sizeof nb, "%d fps", G.fpsCap); name = nb; }
+            if (ui::button({x + w - 200, y, 200, 50}, name, {226, 214, 190, 255}, true, 24)) {
+                int k = 0; for (int i = 0; i < 5; i++) if (CAPS[i] == G.fpsCap) k = i;
+                G.fpsCap = CAPS[(k + 1) % 5]; changed = true;
+            }
+        }
+        y += 110;
+        if (slider({x, y, w, 26}, G.fov, 55, 100, "Field of view", "%.0f degrees")) changed = true;
+        y += 100;
+        if (slider({x, y, w, 26}, G.bright, 0.7f, 1.3f, "Brightness", "%.0f%%", 100)) changed = true;
+    } else if (settingsTab == 1) {   // audio
+        if (slider({x, y + 30, w, 26}, G.master, 0, 1, "Master volume", "%.0f%%", 100)) changed = true;
+        y += 130;
+        if (slider({x, y + 30, w, 26}, G.sfxVol, 0, 1, "Sound effects", "%.0f%%", 100)) { changed = true; }
+        y += 130;
+        ui::wrap("The sounds are placeholders made inside the game; recordings come later. Dialogue is text only, so there's no voice volume.", x, y, w, 20, ui::GREY);
+    } else if (settingsTab == 2) {   // graphics
+        {
+            ui::text("Quality", x, y + 12, 24, INK);
+            const char* q = G.msaa && G.shadows ? "High" : G.msaa || G.shadows ? "Medium" : "Low";
+            if (ui::button({x + w - 200, y, 200, 50}, q, {226, 214, 190, 255}, true, 24)) {
+                int cur = G.msaa && G.shadows ? 2 : G.msaa || G.shadows ? 1 : 0, next = (cur + 1) % 3;
+                G.msaa = next >= 1; G.shadows = next >= 2; changed = true;
+            }
+        }
+        y += 90;
+        if (toggle({x, y, w, 50}, "Smooth edges (4x anti-aliasing)", G.msaa, "Takes effect the next time you start the game")) { G.msaa = !G.msaa; changed = true; }
+        y += 90;
+        if (toggle({x, y, w, 50}, "Soft shadows", G.shadows, "Dark patches under furniture and people")) { G.shadows = !G.shadows; changed = true; }
+        y += 100;
+        ui::wrap("More to come: real-time shadows, ambient occlusion, textures and better lighting. Low is for older computers.", x, y, w, 20, ui::GREY);
+    } else {   // game
+        if (slider({x, y + 30, w, 26}, G.sens, 0.3f, 3, "Mouse sensitivity", "%.2fx")) changed = true;
+        y += 130;
+        if (toggle({x, y, w, 50}, "Strong language", pz::strongLanguage, "Angry customers swear")) { pz::strongLanguage = !pz::strongLanguage; changed = true; }
+        y += 90;
+        if (toggle({x, y, w, 50}, "Helper HUD", G.hud, "Top bar, hints and patience bars (off = immersive)")) { G.hud = !G.hud; changed = true; }
+        y += 90;
+        if (toggle({x, y, w, 50}, "Portion guides", G.S.guides, "The bars on the makeline that show a normal portion")) { G.S.guides = !G.S.guides; changed = true; }
+    }
+    if (changed) { applySettings(); saveSettings(); }
+    if (ui::button({box.x + box.width / 2 - 110, box.y + box.height - 76, 220, 56}, "Done", ui::RED, true, 26) || IsKeyPressed(KEY_ESCAPE)) { showSettings = false; dragging = nullptr; saveSettings(); }
+}
+
 void eulaScreen() {
     DrawRectangle(-2000, -2000, 5600, 4900, {40, 32, 30, 255});
     Rectangle card{180, 50, 1240, 800};
@@ -340,16 +443,15 @@ void eulaScreen() {
 void pauseMenu() {
     Store& S = G.S;
     DrawRectangle(0, 0, 1600, 900, {30, 20, 16, 170});
-    Rectangle box{560, 160, 480, 600};
+    Rectangle box{560, 150, 480, 600};
     ui::panel(box, ui::CREAM, 16, 5, true);
     ui::text("PAUSED", box.x + box.width / 2, box.y + 26, 48, ui::DKRED, 1);
     if (ui::button({box.x + 50, box.y + 110, 380, 62}, "Back to work", ui::RED, true, 26)) { G.paused = false; setMode(G.mode); }
     if (ui::button({box.x + 50, box.y + 190, 380, 54}, S.guides ? "Portion guides: ON" : "Portion guides: OFF", S.guides ? ui::GREEN : Color{214, 204, 186, 255}, true, 22)) S.guides = !S.guides;
-    if (ui::button({box.x + 50, box.y + 260, 380, 54}, pz::strongLanguage ? "Strong language: ON" : "Strong language: OFF", pz::strongLanguage ? ui::GREEN : Color{214, 204, 186, 255}, true, 22)) { pz::strongLanguage = !pz::strongLanguage; saveSettings(); }
-    if (ui::button({box.x + 50, box.y + 330, 380, 54}, G.hud ? "Helper HUD: ON" : "Helper HUD: OFF (immersive)", G.hud ? ui::GREEN : Color{214, 204, 186, 255}, true, 22)) { G.hud = !G.hud; saveSettings(); }
-    if (ui::button({box.x + 50, box.y + 400, 380, 54}, "How to play", ui::YELLOW, true, 22)) G.help = true;
-    if (ui::button({box.x + 50, box.y + 470, 380, 54}, "Walk out (lose today)", {214, 204, 186, 255}, true, 22)) { G.paused = false; G.mode = M_WALK; screen = TITLE; }
-    ui::text("F11 fullscreen", box.x + box.width / 2, box.y + 548, 18, ui::GREY, 1);
+    if (ui::button({box.x + 50, box.y + 260, 380, 54}, "Settings", {226, 214, 190, 255}, true, 22)) showSettings = true;
+    if (ui::button({box.x + 50, box.y + 330, 380, 54}, "How to play", ui::YELLOW, true, 22)) G.help = true;
+    if (ui::button({box.x + 50, box.y + 400, 380, 54}, "Walk out (lose today)", {214, 204, 186, 255}, true, 22)) { G.paused = false; G.mode = M_WALK; screen = TITLE; }
+    ui::text("F11 fullscreen", box.x + box.width / 2, box.y + 478, 18, ui::GREY, 1);
     if (G.help) helpPanel();
 }
 
@@ -421,12 +523,13 @@ int main(int argc, char** argv) {
         else if (!strcmp(argv[i], "--noguides")) G.S.guides = false;
     }
     shotMode = shot != nullptr;
-    SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_VSYNC_HINT | FLAG_MSAA_4X_HINT);
+    loadSettings();   // (before the window exists: anti-aliasing is chosen when it opens)
+    SetConfigFlags(FLAG_WINDOW_RESIZABLE | (G.vsync ? FLAG_VSYNC_HINT : 0) | (G.msaa ? FLAG_MSAA_4X_HINT : 0));
     SetTraceLogLevel(LOG_WARNING);
     InitWindow(shotMode ? 1600 : 1280, shotMode ? 900 : 720, "Makeline");
     SetWindowMinSize(800, 450);
     SetExitKey(KEY_NULL);
-    SetTargetFPS(60);
+    SetTargetFPS(G.fpsCap);
     if (!shotMode) { MaximizeWindow(); audioInit(); }
     ui::loadFonts();
     g3::init();
@@ -442,8 +545,8 @@ int main(int argc, char** argv) {
         s.items.push_back({PEPPERONI, WHOLE, NORMAL}); s.items.push_back({MUSHROOM, WHOLE, NORMAL}); s.items.push_back({PEPPER, WHOLE, NORMAL}); s.items.push_back({OLIVE, WHOLE, NORMAL});
         titlePizza = perfectPizza(s, r);
     }
-    loadSettings();
     load();
+    applySettings();
     update::cleanup();
     if (!shotMode) update::start();
     if (shotMode) {
@@ -501,8 +604,14 @@ int main(int argc, char** argv) {
             DrawTexturePro(logo, {0, 0, (float)logo.width, (float)logo.height}, {800 - w / 2, 450 - h / 2, w, h}, {0, 0}, 0, Fade(WHITE, std::max(0.f, a)));
             if (splashT > 2.6f || ui::pressed || GetKeyPressed()) { screen = (eulaAgreed == eulaFingerprint()) ? TITLE : EULA; eulaFromTitle = false; eulaScroll = 0; }
         } else if (screen == EULA) eulaScreen();
-        else if (screen == TITLE) titleScreen();
-        else if (screen == PLAY) play(dt);
+        else if (screen == TITLE) {
+            if (showSettings) { bool p = ui::pressed, d = ui::down; Vector2 m = ui::M; ui::pressed = ui::down = false; ui::M = {-999, -999}; titleScreen(); ui::pressed = p; ui::down = d; ui::M = m; settingsPanel(); }
+            else titleScreen();
+        }
+        else if (screen == PLAY) {
+            if (showSettings && G.paused) { play(dt); settingsPanel(); }
+            else play(dt);
+        }
         else { dayEnd(); if (G.office) { if (IsKeyPressed(KEY_ESCAPE)) G.office = false; else officeOverlay(); } }
         EndMode2D();
         EndDrawing();

@@ -17,7 +17,7 @@ out vec2 uv; out vec4 col; out vec3 nrm; out vec3 pos;
 void main() { uv = vertexTexCoord; col = vertexColor; nrm = vertexNormal; pos = vertexPosition; gl_Position = mvp * vec4(vertexPosition, 1.0); })";
 const char* FS = R"(#version 330
 in vec2 uv; in vec4 col; in vec3 nrm; in vec3 pos;
-uniform sampler2D texture0; uniform vec4 colDiffuse; uniform vec3 eye;
+uniform sampler2D texture0; uniform vec4 colDiffuse; uniform vec3 eye; uniform float bright;
 out vec4 finalColor;
 void main() {
     vec4 base = texture(texture0, uv) * colDiffuse * col;
@@ -32,20 +32,25 @@ void main() {
         vec3 light = vec3(0.50, 0.50, 0.54) * (0.78 + 0.22 * sky) + vec3(1.0, 0.95, 0.86) * key * 0.50 + vec3(0.60, 0.66, 0.80) * fill * 0.14;
         float rim = pow(1.0 - max(dot(n, v), 0.0), 3.0);
         c = base.rgb * light + vec3(1.0, 0.95, 0.88) * rim * 0.05 * (0.3 + base.rgb);
-        c = min(c, vec3(1.0));
+        c = min(c * bright, vec3(1.0));
     }
     finalColor = vec4(c, base.a);
 })";
-int eyeLoc = -1;
+int eyeLoc = -1, brightLoc = -1;
+}
+bool shadows = true;
+float brightness = 1.0f;
+namespace {
 const float D2R = 0.0174533f;
 void col(Color c) { rlColor4ub(c.r, c.g, c.b, c.a); }
 }  // namespace
 
-void init() { lit = LoadShaderFromMemory(VS, FS); eyeLoc = GetShaderLocation(lit, "eye"); }
+void init() { lit = LoadShaderFromMemory(VS, FS); eyeLoc = GetShaderLocation(lit, "eye"); brightLoc = GetShaderLocation(lit, "bright"); }
 void begin(const Camera3D& cam) {
     BeginMode3D(cam);
     float e[3] = {cam.position.x, cam.position.y, cam.position.z};
     SetShaderValue(lit, eyeLoc, e, SHADER_UNIFORM_VEC3);
+    SetShaderValue(lit, brightLoc, &brightness, SHADER_UNIFORM_FLOAT);
     BeginShaderMode(lit);
     rlDisableBackfaceCulling();
 }
@@ -141,6 +146,7 @@ void quadUp(Vector3 c, float w, float d, Color color) {
 }
 
 void softShadow(Vector3 c, float w, float d, float soft, unsigned char alpha) {
+    if (!shadows) return;
     float x0 = c.x - w / 2, x1 = c.x + w / 2, z0 = c.z - d / 2, z1 = c.z + d / 2;
     float X[4] = {x0 - soft, x0, x1, x1 + soft}, Z[4] = {z0 - soft, z0, z1, z1 + soft};
     rlBegin(RL_TRIANGLES);

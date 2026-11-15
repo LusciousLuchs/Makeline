@@ -33,7 +33,9 @@ up to date when the owner adds to it. "Makeline" is a working title.
   swear (`pz::strongLanguage` switch). The pace should be tense, not fast.
 - The game is satire (EULA placeholder in src/game/eula.inc says so). Pan comes in S/M/L; "not meant to be exactly
   like" any real chain.
-- Multiplayer is planned (co-op, host-authoritative): player actions are `Command`s (src/core/commands.hpp).
+- Multiplayer is planned: **co-op for up to 8 players**, host-authoritative; player actions are `Command`s
+  (src/core/commands.hpp, `MAX_PLAYERS` = 8).
+- Settings menu: Video / Audio / Graphics / Game (`settingsPanel` in main.cpp, saved in makeline_settings.json).
 
 ## Technical notes
 
