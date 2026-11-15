@@ -35,7 +35,7 @@ It's built from five years on a real makeline: the point is that it feels right 
 
 ### A shift
 
-One day is the dinner rush, 5:00 to 6:30 PM, about 9 minutes of play. After
+One day is the dinner rush, 5:00 to 6:00 PM, about 12 minutes of play. After
 closing you finish what's still in the store, then get the day's report: orders, walk-outs, sales, tips, every
 review with what went wrong, and corporate's verdict.
 
@@ -101,7 +101,7 @@ customer's head. The store runs on the same times a real one does:
 | Over 30 minutes | Very late |
 | Over 45 minutes | Extreme: one star, whatever the pizza was like |
 
-A shift is the dinner rush, 5:00 to 6:30 on the shop clock (one clock minute is six seconds of play).
+A shift is the dinner rush, 5:00 to 6:00 on the shop clock (one clock minute is twelve seconds of play).
 
 ## Staff
 

@@ -1,5 +1,11 @@
 # Makeline: what's new
 
+## 0.1.2-alpha
+
+- **Slower clock.** The timing was too tight. A shop minute is now twelve real seconds, so an order is "late"
+  after 4 real minutes, "very late" after 6 and "extreme" after 9. A shift is the 5:00 to 6:00 rush, about
+  12 minutes.
+
 ## 0.1.1-alpha
 
 - **New people.** Customers and staff are now properly proportioned, with faces of their own: head and jaw shape,

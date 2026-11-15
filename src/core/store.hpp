@@ -10,8 +10,8 @@ namespace pz {
 
 constexpr float OVEN_TIME = 30;
 constexpr float REPRIMAND_BELOW = 3.0f;
-constexpr float SEC_PER_MIN = 6;         // one minute on the shop clock, in real seconds
-constexpr float SHIFT_LEN = 90 * SEC_PER_MIN;   // the dinner rush: 5:00 to 6:30
+constexpr float SEC_PER_MIN = 12;        // one minute on the shop clock, in real seconds (20 minutes late = 4 real minutes)
+constexpr float SHIFT_LEN = 60 * SEC_PER_MIN;   // the dinner rush: 5:00 to 6:00, 12 minutes of play
 
 enum CustState { C_RINGING, C_INLINE, C_ORDERING, C_COMING, C_WAITING, C_AWAY, C_DONE };
 struct Customer {

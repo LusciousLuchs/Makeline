@@ -77,7 +77,7 @@ int main() {
         for (int day = 1; day <= 4; day++) {
             Store s; s.day = day; s.startDay(100 + day);
             Rng br(day);
-            for (int i = 0; i < 60 * 1000 && !s.dayOver; i++) { s.update(1 / 60.f); botStep(s, 1 / 60.f, care, br); }
+            for (int i = 0; i < 60 * 1600 && !s.dayOver; i++) { s.update(1 / 60.f); botStep(s, 1 / 60.f, care, br); }
             CHECK(s.dayOver);
             for (auto& r : s.dayReviews) { sum += r.stars; n++; if (pass == 0 && getenv("MAKELINE_TESTDBG")) { printf("  day %d %d*:", day, r.stars); for (auto& x : r.reasons) printf(" [%s]", x.c_str()); printf("\n"); } }
             orders += s.dayOrders; lost += s.dayLost;
@@ -118,7 +118,7 @@ int main() {
             Store s; s.startDay(77);
             float skill = pass == 0 ? 0.97f : 0.25f;
             for (int role : {CSR, CSR, COOK, COOK, DRIVER}) { Worker w; Rng r(role + 5); w.who = makePerson(r); w.role = role; w.skill = skill; s.staff.push_back(w); }
-            for (int i = 0; i < 60 * 1000 && !s.dayOver; i++) s.update(1 / 60.f);
+            for (int i = 0; i < 60 * 1600 && !s.dayOver; i++) s.update(1 / 60.f);
             if (getenv("MAKELINE_TESTDBG")) for (auto& r : s.dayReviews) { printf("  crew %d*:", r.stars); for (auto& x : r.reasons) printf(" [%s]", x.c_str()); printf("\n"); }
             CHECK(s.dayOver);
             float sum = 0; for (auto& r : s.dayReviews) sum += r.stars;
