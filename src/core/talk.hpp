@@ -5,6 +5,7 @@
 #include <vector>
 
 namespace pz {
+struct Ctx;   // the situation a line is said in (speech.hpp)
 
 struct Person {
     std::string name;
@@ -19,13 +20,17 @@ Spec randomPizza(Rng& rng, int day);
 std::vector<Spec> randomOrder(Rng& rng, int day);
 
 // the lines a customer says to place their order, in the order they say them (changes of mind and all)
-std::vector<std::string> orderScript(Rng& rng, const Person& who, const std::vector<Spec>& want, int service, bool phone, int day);
+std::vector<std::string> orderScript(Rng& rng, const Person& who, const std::vector<Spec>& want, int service, bool phone, int day, int hour = 17);
 // said again, annoyed, with no detours
-std::string recap(Rng& rng, const std::vector<Spec>& want, int service, bool phone);
+std::string recap(Rng& rng, const std::vector<Spec>& want, int service, bool phone, const Ctx* ctx = nullptr);
 // their answer to having the entered order read back; `ok` when it's what they asked for
-std::string readBack(Rng& rng, const std::vector<Spec>& want, const std::vector<Spec>& entered, int wantService, int enteredService, bool phone, bool& ok);
+std::string readBack(Rng& rng, const std::vector<Spec>& want, const std::vector<Spec>& entered, int wantService, int enteredService, bool phone, bool& ok, const Ctx* ctx = nullptr);
 std::string speakPizza(Rng& rng, const Spec& s, bool inches);
-std::string waitingBark(Rng& rng, float patience);
+std::string waitingBark(Rng& rng, float patience, const Ctx* ctx = nullptr);
+// The customer's temper in their words: below about 0.35 anger a line is left alone, then it picks up some cursing
+// (mild first, the real thing past about 0.65). Does nothing while `strongLanguage` is off.
+extern bool strongLanguage;
+std::string heat(Rng& rng, const std::string& line, float anger);
 std::string reviewText(Rng& rng, const Score& score, int stars);
 std::string issueLine(const Issue& is);   // the plain reason, for the day's report: "Too little Pepperoni"
 std::string streetAddress(Rng& rng);

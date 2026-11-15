@@ -1,5 +1,9 @@
 // Makeline - tests of the rules: portions, judging, what customers say, and whole shifts played by a bot.
 #include "store.hpp"
+#include "commands.hpp"
+#include "speech.hpp"
+#include <set>
+#include <map>
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
@@ -155,6 +159,100 @@ int main() {
         Store e; e.forceStart = 9 * 60; e.startDay(1);   // an opening shift runs 9 to 5 and stops taking customers 20 minutes before the end
         for (int i = 0; i < 20 * 9000 && !e.dayOver; i++) { CHECK(!e.idle() || e.custs.empty() || true); e.update(1 / 20.f); }
         CHECK(e.dayOver && e.shiftEnd() == 17 * 60);
+    }
+    {   // strong language: angry customers curse, calm ones don't, and the switch turns it off
+        Rng r(8);
+        int changed = 0, calm = 0;
+        strongLanguage = true;
+        for (int i = 0; i < 400; i++) { if (heat(r, "Where is my pizza?", 0.9f) != "Where is my pizza?") changed++; if (heat(r, "Where is my pizza?", 0.1f) != "Where is my pizza?") calm++; }
+        CHECK(changed > 250); CHECK(calm == 0);
+        strongLanguage = false;
+        for (int i = 0; i < 400; i++) CHECK(heat(r, "Where is my pizza?", 0.9f) == "Where is my pizza?");
+        strongLanguage = true;
+        // pan comes in small, medium and large; thin in medium and large
+        CHECK(crustComesIn(PAN, SMALL) && crustComesIn(PAN, MEDIUM) && crustComesIn(PAN, LARGE) && !crustComesIn(PAN, XLARGE));
+        CHECK(!crustComesIn(THIN, SMALL) && crustComesIn(THIN, MEDIUM) && crustComesIn(THIN, LARGE));
+    }
+    {   // dialogue: no language model, but customers don't sound alike. Over a whole day's worth of calls, the same
+        // opening line should hardly ever come back, and the shop remembers what it said lately.
+        Rng r(21);
+        SpeechMemory mem; UseSpeechMemory use(mem);
+        std::map<std::string, int> opens, closes, barks;
+        int total = 300;
+        for (int i = 0; i < total; i++) {
+            Person p = makePerson(r);
+            auto want = randomOrder(r, 3);
+            auto lines = orderScript(r, p, want, i % 2 ? DELIVERY : CARRYOUT, i % 2 == 0, 3, 9 + i % 14);
+            CHECK(lines.size() >= 3);
+            opens[lines[0]]++; closes[lines[lines.size() - 1]]++;
+            Ctx c; c.who = &p; c.minutes = 5.f + (i % 45); c.anger = (i % 10) / 10.f; c.hour = 12;
+            barks[waitingBark(r, 1 - c.anger, &c)]++;
+        }
+        auto worst = [](std::map<std::string, int>& m) { int w = 0; for (auto& kv : m) w = std::max(w, kv.second); return w; };
+        printf("dialogue variety over %d customers: %d different openings (the most used %d times), %d different bark lines (most used %d)\n", total, (int)opens.size(), worst(opens), (int)barks.size(), worst(barks));
+        CHECK((int)opens.size() > 25); CHECK(worst(opens) < total / 8);
+        CHECK((int)barks.size() > 30); CHECK(worst(barks) < total / 8);
+        // the same customer asked again and again gets shorter with you
+        Person p = makePerson(r); p.mood = 3;
+        Ctx c; c.who = &p; c.phone = true; c.anger = 0.5f;
+        std::set<std::string> seen;
+        for (int k = 1; k <= 3; k++) { c.asks = k; seen.insert(recap(r, randomOrder(r, 2), CARRYOUT, true, &c)); }
+        CHECK(seen.size() == 3);
+        if (getenv("MAKELINE_TESTDBG")) {
+            Rng q(77);
+            for (int i = 0; i < 6; i++) {
+                Person w = makePerson(q); w.mood = i % 4;
+                printf("--- %s (age %d, mood %d)\n", w.name.c_str(), w.age, w.mood);
+                for (auto& l : orderScript(q, w, randomOrder(q, 3), i % 2 ? DELIVERY : CARRYOUT, i % 2 == 0, 3, 12 + i * 2)) printf("   %s\n", l.c_str());
+            }
+        }
+    }
+    {   // multiplayer groundwork: two copies of the shop that get the same commands (sent as text) stay identical
+        Store A, B;
+        A.schedSeed = B.schedSeed = 3; A.forceStart = B.forceStart = 17 * 60;
+        A.startDay(31); B.startDay(31);
+        Rng br(2);
+        int sent = 0, refused = 0;
+        auto send = [&](Command c) {
+            Command back;
+            CHECK(commandFromJson(commandToJson(c), back));   // over the wire and back
+            bool ok = apply(A, c);
+            bool ok2 = apply(B, back);
+            CHECK(ok == ok2);
+            sent++; if (!ok) refused++;
+        };
+        for (int i = 0; i < 20 * 9000 && !A.dayOver; i++) {
+            A.update(1 / 20.f); B.update(1 / 20.f);
+            if (i % 20 != 0) continue;
+            if (A.talk.active() && A.talk.pending.empty() && !A.talk.speaking) {
+                Customer* c = A.cust(A.talk.cust);
+                Command d; d.type = CMD_SET_DRAFT; d.a = c->service; d.text = specsToJson(c->want); send(d);
+                Command o; o.type = CMD_SEND_ORDER; send(o);
+            } else if (A.ringing() >= 0 && !A.talk.active()) { Command t; t.type = CMD_TAKE_ORDER; t.a = A.ringing(); send(t); }
+            else if (A.firstInLine() >= 0 && !A.talk.active() && A.openTickets().empty()) { Command t; t.type = CMD_TAKE_ORDER; t.a = A.firstInLine(); send(t); }
+            if (A.bench >= 0) {
+                Pizza* p = A.pizza(A.bench);
+                for (int k = 0; k < 12; k++) { Command s; s.type = CMD_SAUCE; s.a = p->id; s.b = MARINARA; s.x = br.range(-0.6f, 0.6f); s.y = br.range(-0.6f, 0.6f); s.z = 0.4f; send(s); }
+                for (int k = 0; k < 10; k++) { Command b; b.type = CMD_BIT; b.a = p->id; b.b = PEPPERONI; b.x = br.range(-0.7f, 0.7f); b.y = br.range(-0.7f, 0.7f); send(b); }
+                Command o; o.type = CMD_TO_OVEN; send(o);
+            } else if (!A.openTickets().empty() && A.ovenHasRoom()) {
+                Ticket* k = A.ticket(A.openTickets()[0]);
+                Command s; s.type = CMD_START_PIZZA; s.a = k->id; s.b = k->spec.size; s.c = k->spec.crust; send(s);
+            }
+            if (A.cutBoard >= 0) {
+                Command cut; cut.type = CMD_CUT; cut.x = -1; cut.y = 0.02f; cut.z = 1; cut.w = 0.02f; send(cut);
+                Command bx; bx.type = CMD_BOX; send(bx);
+            } else if (!A.exitQ.empty()) { Command t; t.type = CMD_TO_CUT; t.a = A.exitQ[0]; send(t); }
+            for (int id : A.lobby()) { Command h; h.type = CMD_HAND_OUT; h.a = id; send(h); }
+            if (i % 400 == 0) CHECK(digest(A) == digest(B));
+        }
+        CHECK(A.dayOver && B.dayOver);
+        CHECK(digest(A) == digest(B));
+        CHECK(sent > 200 && A.orders.size() > 5);
+        printf("multiplayer groundwork: %d commands (%d refused), %d orders, both copies end at %s\n", sent, refused, (int)A.orders.size(), digest(A).c_str());
+        Command junk;
+        CHECK(!commandFromJson("{\"t\": 9999}", junk)); CHECK(!commandFromJson("nonsense", junk));
+        CHECK(specsFromJson("[{\"size\": 99, \"items\": [[3, 0, 1]]}]")[0].items.size() == 1);   // junk is clamped, never trusted
     }
     {   // a script always names every topping somewhere (or loses one to static)
         for (int k = 0; k < 300; k++) {

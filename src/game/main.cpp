@@ -2,6 +2,9 @@
 #include "game.hpp"
 #include "updater.hpp"
 #include "version.hpp"
+#include "json.hpp"
+#include "talk.hpp"
+#include "eula.inc"
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -17,7 +20,10 @@ bool gShotMode = false;
 extern const unsigned char* logoJpg(int* size);   // ui.cpp holds the embedded files
 
 namespace {
-enum Screen { SPLASH, TITLE, PLAY, DAYEND };
+enum Screen { SPLASH, EULA, TITLE, PLAY, DAYEND };
+std::string eulaAgreed;      // a fingerprint of the agreement the player accepted
+bool eulaFromTitle = false;  // reading it again from the title (nothing to agree to)
+float eulaScroll = 0;
 int screen = SPLASH;
 float splashT = 0, reviewScroll = 0;
 bool confirmNew = false, wantQuit = false;
@@ -30,6 +36,31 @@ Pizza titlePizza;
 
 std::string savePath() { return std::string(GetApplicationDirectory()) + "makeline_save.json"; }
 void save() { if (!shotMode) SaveFileText(savePath().c_str(), (char*)G.S.toJson().c_str()); }
+std::string eulaFingerprint() {
+    uint64_t h = 1469598103934665603ull;
+    for (const char* p = EULA_TEXT; *p; p++) { h ^= (unsigned char)*p; h *= 1099511628211ull; }
+    char b[24]; snprintf(b, sizeof b, "%016llx", (unsigned long long)h);
+    return b;
+}
+std::string settingsPath() { return std::string(GetApplicationDirectory()) + "makeline_settings.json"; }
+void saveSettings() {
+    if (shotMode) return;
+    nlohmann::json j;
+    j["eulaAgreed"] = eulaAgreed; j["strongLanguage"] = pz::strongLanguage; j["hud"] = G.hud;
+    std::string t = j.dump(1);
+    SaveFileText(settingsPath().c_str(), (char*)t.c_str());
+}
+void loadSettings() {
+    if (shotMode || !FileExists(settingsPath().c_str())) return;
+    char* t = LoadFileText(settingsPath().c_str());
+    if (!t) return;
+    nlohmann::json j = nlohmann::json::parse(t, nullptr, false);
+    UnloadFileText(t);
+    if (!j.is_object()) return;
+    eulaAgreed = j.value("eulaAgreed", std::string());
+    pz::strongLanguage = j.value("strongLanguage", true);
+    G.hud = j.value("hud", false);
+}
 void load() {
     if (shotMode || !FileExists(savePath().c_str())) return;
     char* t = LoadFileText(savePath().c_str());
@@ -72,12 +103,12 @@ void events() {
 
 void topBar() {
     Store& S = G.S;
+    if (!G.hud) return;   // maximum immersion: the clock and rating are on the wall sign, the rest is in the office
     DrawRectangle(-2000, 0, 5600, 64, INK);
-    ui::text("MAKELINE", 20, 16, 30, ui::RED);
     char b[64];
     snprintf(b, sizeof b, "Day %d", S.day);
-    ui::text(b, 240, 18, 26, ui::CREAM);
-    ui::text(S.closed ? (S.shiftEnd() >= CLOSE_MIN ? "CLOSING - finish up" : "SHIFT OVER - finish up") : S.clock() + "   (until " + Store::timeText(S.shiftEnd()) + ")", 340, 18, 26, S.closed ? ui::RED : ui::YELLOW);
+    ui::text(b, 20, 18, 26, ui::CREAM);
+    ui::text(S.closed ? (S.shiftEnd() >= CLOSE_MIN ? "CLOSING - finish up" : "SHIFT OVER - finish up") : S.clock() + "   (until " + Store::timeText(S.shiftEnd()) + ")", 120, 18, 26, S.closed ? ui::RED : ui::YELLOW);
     float rt = S.rating();
     ui::stars(1150, 18, 28, rt, {110, 92, 82, 255});
     if (rt > 0) snprintf(b, sizeof b, "%.1f", rt); else snprintf(b, sizeof b, "new");
@@ -89,7 +120,8 @@ void topBar() {
 }
 
 void drawToasts() {
-    float y = 76;
+    if (!G.hud) return;   // reviews show up on the wall sign instead
+    float y = G.mode == M_WALK ? 16 : 76;
     for (auto& t : G.toasts) {
         float in = ui::ease(t.age / 0.3f), out = ui::ease((t.age - 6.5f) / 0.5f);
         float w = 440, h = ui::wrap(t.text, 0, 0, w - 28, 18, INK, false) + (t.stars ? 46 : 20);
@@ -181,8 +213,10 @@ void titleScreen() {
     ui::wrap(us, card.x + 46, card.y + 560, 380, 18, ui::GREY);
     if (u.state == update::State::Installed) { if (ui::button({card.x + 420, card.y + 552, 154, 44}, "Restart now", ui::GREEN, true, 20)) { if (update::restart()) wantQuit = true; } }
     else if (u.state == update::State::UpToDate || u.state == update::State::Failed) { if (ui::button({card.x + 420, card.y + 552, 154, 44}, "Check again", {214, 204, 186, 255}, true, 18)) update::checkNow(); }
-    ui::text(std::string("Version ") + version::text(), card.x + 46, card.y + 622, 18, ui::GREY);
-    ui::text("OAB Foundry", card.x + 574, card.y + 622, 18, ui::GREY, 2);
+    if (ui::button({card.x + 46, card.y + 596, 220, 38}, pz::strongLanguage ? "Strong language: ON" : "Strong language: OFF", pz::strongLanguage ? ui::GREEN : Color{214, 204, 186, 255}, true, 17)) { pz::strongLanguage = !pz::strongLanguage; saveSettings(); }
+    if (ui::button({card.x + 280, card.y + 596, 150, 38}, "Agreement", {214, 204, 186, 255}, true, 17)) { eulaFromTitle = true; eulaScroll = 0; screen = EULA; }
+    ui::text(std::string("Version ") + version::text() + "   -   a work of satire", card.x + 46, card.y + 648, 18, ui::GREY);
+    ui::text("OAB Foundry", card.x + 574, card.y + 648, 18, ui::GREY, 2);
     if (G.help) helpPanel();
 }
 
@@ -275,17 +309,47 @@ void dayEnd() {
     else if (ry < bottom - 200 && reviewScroll > 0) reviewScroll = std::max(0.f, reviewScroll - 30);
 }
 
+void eulaScreen() {
+    DrawRectangle(-2000, -2000, 5600, 4900, {40, 32, 30, 255});
+    Rectangle card{180, 50, 1240, 800};
+    ui::panel(card, ui::CREAM, 16, 5, true);
+    Rectangle ban{card.x + 30, card.y + 22, card.width - 60, 92};
+    DrawRectangleRounded(ban, 0.15f, 6, ui::DKRED);
+    ui::text("A WORK OF SATIRE", ban.x + ban.width / 2, ban.y + 6, 44, ui::PAPER, 1);
+    ui::text("Everyone in this game is made up, and they are awful on purpose.", ban.x + ban.width / 2, ban.y + 58, 24, {250, 226, 214, 255}, 1);
+    Rectangle box{card.x + 30, card.y + 130, card.width - 60, card.height - 130 - 100};
+    float full = ui::wrap(EULA_TEXT, 0, 0, box.width - 40, 21, ui::INK, false);
+    float maxScroll = std::max(0.f, full - box.height + 20);
+    if (ui::hover(box)) eulaScroll = std::clamp(eulaScroll - GetMouseWheelMove() * 60, 0.f, maxScroll);
+    eulaScroll = std::clamp(eulaScroll, 0.f, maxScroll);
+    DrawRectangleRec(box, ui::PAPER);
+    Vector2 a = ui::toScreen({box.x, box.y});
+    BeginScissorMode((int)a.x, (int)a.y, (int)(box.width * ui::scale), (int)(box.height * ui::scale));
+    ui::wrap(EULA_TEXT, box.x + 20, box.y + 10 - eulaScroll, box.width - 40, 21, ui::INK);
+    EndScissorMode();
+    DrawRectangleLinesEx(box, 2, ui::INK);
+    if (maxScroll > 0) ui::text("scroll for the rest", box.x + box.width - 10, box.y + box.height + 4, 16, ui::GREY, 2);
+    if (eulaFromTitle) {
+        if (ui::button({card.x + card.width / 2 - 100, card.y + card.height - 74, 200, 56}, "Back", ui::YELLOW, true, 26) || IsKeyPressed(KEY_ESCAPE)) screen = TITLE;
+    } else {
+        if (ui::button({card.x + 30, card.y + card.height - 74, 420, 56}, "I agree. It's satire.", ui::GREEN, true, 26)) { eulaAgreed = eulaFingerprint(); saveSettings(); screen = TITLE; }
+        if (ui::button({card.x + card.width - 250, card.y + card.height - 74, 220, 56}, "Quit", {214, 204, 186, 255}, true, 26)) wantQuit = true;
+    }
+}
+
 void pauseMenu() {
     Store& S = G.S;
     DrawRectangle(0, 0, 1600, 900, {30, 20, 16, 170});
-    Rectangle box{560, 220, 480, 470};
+    Rectangle box{560, 160, 480, 600};
     ui::panel(box, ui::CREAM, 16, 5, true);
     ui::text("PAUSED", box.x + box.width / 2, box.y + 26, 48, ui::DKRED, 1);
     if (ui::button({box.x + 50, box.y + 110, 380, 62}, "Back to work", ui::RED, true, 26)) { G.paused = false; setMode(G.mode); }
     if (ui::button({box.x + 50, box.y + 190, 380, 54}, S.guides ? "Portion guides: ON" : "Portion guides: OFF", S.guides ? ui::GREEN : Color{214, 204, 186, 255}, true, 22)) S.guides = !S.guides;
-    if (ui::button({box.x + 50, box.y + 260, 380, 54}, "How to play", ui::YELLOW, true, 22)) G.help = true;
-    if (ui::button({box.x + 50, box.y + 330, 380, 54}, "Walk out (lose today)", {214, 204, 186, 255}, true, 22)) { G.paused = false; G.mode = M_WALK; screen = TITLE; }
-    ui::text("F11 fullscreen", box.x + box.width / 2, box.y + 414, 18, ui::GREY, 1);
+    if (ui::button({box.x + 50, box.y + 260, 380, 54}, pz::strongLanguage ? "Strong language: ON" : "Strong language: OFF", pz::strongLanguage ? ui::GREEN : Color{214, 204, 186, 255}, true, 22)) { pz::strongLanguage = !pz::strongLanguage; saveSettings(); }
+    if (ui::button({box.x + 50, box.y + 330, 380, 54}, G.hud ? "Helper HUD: ON" : "Helper HUD: OFF (immersive)", G.hud ? ui::GREEN : Color{214, 204, 186, 255}, true, 22)) { G.hud = !G.hud; saveSettings(); }
+    if (ui::button({box.x + 50, box.y + 400, 380, 54}, "How to play", ui::YELLOW, true, 22)) G.help = true;
+    if (ui::button({box.x + 50, box.y + 470, 380, 54}, "Walk out (lose today)", {214, 204, 186, 255}, true, 22)) { G.paused = false; G.mode = M_WALK; screen = TITLE; }
+    ui::text("F11 fullscreen", box.x + box.width / 2, box.y + 548, 18, ui::GREY, 1);
     if (G.help) helpPanel();
 }
 
@@ -314,6 +378,8 @@ void play(float dt) {
     audioUpdate(!G.paused && S.ringing() >= 0);
     worldUpdate(dt);
     EndMode2D();
+    posRender();
+    signRender();
     ClearBackground({30, 24, 22, 255});
     worldDraw();
     BeginMode2D(Camera2D{ui::offset, {0, 0}, 0, ui::scale});
@@ -323,7 +389,7 @@ void play(float dt) {
     worldHud();
     if (G.mode == M_REGISTER) registerOverlay(); else if (G.mode == M_MAKE) makeOverlay(); else if (G.mode == M_CUT) cutOverlay();
     topBar();
-    if (G.skipping && !G.paused) { ui::panel({600, 86, 400, 44}, ui::CREAM, 12, 3, true); ui::text("Quiet... skipping ahead", 800, 94, 24, INK, 1); }
+    if (G.skipping && !G.paused && G.hud) { ui::panel({600, 86, 400, 44}, ui::CREAM, 12, 3, true); ui::text("Quiet... skipping ahead", 800, 94, 24, INK, 1); }
     drawToasts();
     ui::M = keepM; ui::pressed = kp; ui::down = kd;
     if (G.chart && !G.paused) portionChart();
@@ -376,12 +442,14 @@ int main(int argc, char** argv) {
         s.items.push_back({PEPPERONI, WHOLE, NORMAL}); s.items.push_back({MUSHROOM, WHOLE, NORMAL}); s.items.push_back({PEPPER, WHOLE, NORMAL}); s.items.push_back({OLIVE, WHOLE, NORMAL});
         titlePizza = perfectPizza(s, r);
     }
+    loadSettings();
     load();
     update::cleanup();
     if (!shotMode) update::start();
     if (shotMode) {
         screen = TITLE;
-        if (show != "title") {
+        if (show == "eula") { screen = EULA; eulaFromTitle = false; }
+        else if (show != "title") {
             startShift();
             Rng br(3);
             for (float t = 0; t < warm; t += 1 / 30.f) { G.S.update(1 / 30.f); botStep(G.S, 1 / 30.f, care, br); }
@@ -405,6 +473,7 @@ int main(int argc, char** argv) {
             if (station >= 0) setMode(station);
             if (at) sscanf(at, "%f,%f,%f,%f", &G.px, &G.pz, &G.yaw, &G.pitch);
             if (show == "chart") G.chart = true;
+            if (show == "hud") G.hud = true;
             if (show.rfind("office", 0) == 0) { G.office = true; G.officeTab = show.size() > 6 ? show[6] - '0' : 0; }
             if (hireN) { Store& S = G.S; S.applicants.clear(); S.newApplicants(); for (int i = 0; i < hireN && !S.applicants.empty(); i++) S.hire(0); }
             if (show == "pause") G.paused = true;
@@ -430,8 +499,9 @@ int main(int argc, char** argv) {
             float a = std::min({1.f, splashT / 0.5f, (2.6f - splashT) / 0.5f});
             float w = 900, h = w * logo.height / std::max(1, logo.width);
             DrawTexturePro(logo, {0, 0, (float)logo.width, (float)logo.height}, {800 - w / 2, 450 - h / 2, w, h}, {0, 0}, 0, Fade(WHITE, std::max(0.f, a)));
-            if (splashT > 2.6f || ui::pressed || GetKeyPressed()) screen = TITLE;
-        } else if (screen == TITLE) titleScreen();
+            if (splashT > 2.6f || ui::pressed || GetKeyPressed()) { screen = (eulaAgreed == eulaFingerprint()) ? TITLE : EULA; eulaFromTitle = false; eulaScroll = 0; }
+        } else if (screen == EULA) eulaScreen();
+        else if (screen == TITLE) titleScreen();
         else if (screen == PLAY) play(dt);
         else { dayEnd(); if (G.office) { if (IsKeyPressed(KEY_ESCAPE)) G.office = false; else officeOverlay(); } }
         EndMode2D();

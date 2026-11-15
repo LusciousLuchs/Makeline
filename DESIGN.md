@@ -49,6 +49,16 @@ It's built from five years on a real makeline: the point is that it feels right 
 Days get busier and orders get harder: day 1 is one-topping pizzas with portion guides on; later days bring
 half-and-half, light and extra, several pizzas an order, customers who change their mind, and bad phone lines.
 
+### Pace
+
+Tense and stressful, not frantic: fewer orders than a real rush, customers who lose patience slowly, and talking that
+takes its time. The pressure comes from the order timers and from small mistakes adding up, not from speed.
+
+### Satire
+
+The game is satire and says so: on the agreement screen at first start, on the title screen and in the credits.
+Everyone in it is invented. The customers are rude on purpose; the staff are the sympathetic ones.
+
 ### The store (3D, first person)
 
 You walk around behind the counter. Each station is a place in the store:
@@ -62,9 +72,26 @@ You walk around behind the counter. Each station is a place in the store:
 | Cut table | End of the oven | Cut and box |
 | Heat rack | Right wall | Boxed orders wait here for the customer or a driver |
 
+### Immersion
+
+The game is meant to be played as the person in the shop, not as a screen of menus:
+
+- **No HUD in first person.** No top bar, no hints, no patience bars. A sign on the wall shows the shop clock, your
+  rating and the latest review. The order terminal, tickets and boxes are things in the shop. Customers' words
+  appear as subtitles. A pause-menu switch brings the helper HUD back for anyone who wants it.
+- You find out what needs doing the way a real manager does: the phone rings, the door opens, the oven beeps,
+  people stand and glare.
+
 ### Taking orders
 
 - Customers order **at the counter** or **by phone**, in text dialogue, at their own speed.
+- **Their words are generated, not scripted or from an AI.** A small grammar builds each line from who they are
+  (age, mood: hurried, mumbling, unsure or entitled, politeness), the time of day, how long their order has been
+  running and how often you've made them repeat. The shop remembers what was said lately so lines don't come round
+  twice. Angry customers **swear** (switchable under "Strong language"). They get shorter with you each time you ask
+  them to repeat or read back.
+- You take the order on the **register's computer**: a point-of-sale terminal on the counter, with the order so far
+  on the left, the size/crust/sauce/cheese/toppings in the middle and tabs down the right.
 - You enter what they say on the order screen: size, crust, sauce and how much, cheese, each topping (whole, left
   or right half; light, normal or extra), how many pizzas, and carryout or delivery for phone orders.
 - **What you enter is what gets made.** The customer's real order is never shown to you.
@@ -76,7 +103,7 @@ You walk around behind the counter. Each station is a place in the store:
 
 - Pick the ticket, grab the right dough (size and crust), then build it by hand:
   ladle the sauce on and spread it, sprinkle cheese, sprinkle or place toppings. Toppings can be picked back off.
-- **Sizes:** Small 10", Medium 12", Large 14", X-Large 16". **Crusts:** hand tossed, thin (M, L), pan (M).
+- **Sizes:** Small 10", Medium 12", Large 14", X-Large 16". **Crusts:** hand tossed (all sizes), thin (M, L), pan (S, M, L). This isn't meant to match any real chain's menu exactly.
 - **Sauces:** marinara, alfredo, garlic parm, barbecue.
 - **Cheeses:** shredded mozzarella, mozzarella balls, provolone, cheddar, parmesan, feta.
 - **Vegetables:** onions, green peppers, pineapple, tomatoes, mushrooms, black olives.
@@ -183,6 +210,15 @@ Every finished or failed order is judged against what the customer **actually** 
 - **Its own GitHub repository**, with releases published automatically when the version goes up.
 - **Self-updating:** the game checks the repository's newest release at start, downloads and installs it.
 - One save: day, money, reviews, reprimands, staff.
+
+## Multiplayer (planned)
+
+Co-op: friends run the shop together, each taking a job (register, makeline, oven and cut table, driver, or manager).
+**Groundwork is in:** every player action is a `Command` (src/core/commands.hpp). The plan is host-authoritative: one
+machine runs the shop and applies everyone's commands in order, and sends the results back. Two copies of the shop
+fed the same commands stay identical (tested), which is what makes this practical.
+Still to do: a network layer (sockets, joining by code), several makelines and cut tables, per-player cameras and
+voices, who owns which station, and how staff AI fills the jobs nobody is playing. Open: how many players (2 to 4?).
 
 ## Later
 

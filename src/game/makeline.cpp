@@ -195,7 +195,7 @@ void portionChart() {
     note("Half and half", "A topping on one half gets half its portion, all of it on that half.");
     note("Close enough", "Too little is what customers notice (under about 80%). Too much is forgiven up to about 1.6 times, but spread it evenly, edge to edge.");
     note("Cutting", "Pie cut: Small is 6 slices (3 cuts), the rest are 8 (4 cuts), all through the middle. THIN crust is cut in squares.");
-    note("Sizes", "10\" Small, 12\" Medium, 14\" Large, 16\" X-Large. Thin comes in M and L, Pan in M.");
+    note("Sizes", "10\" Small, 12\" Medium, 14\" Large, 16\" X-Large. Thin comes in M and L, Pan in S, M and L.");
     if (ui::button({box.x + box.width - 150, box.y + 16, 130, 44}, "Close", ui::YELLOW, true, 22) || IsKeyPressed(KEY_TAB)) G.chart = false;
 }
 

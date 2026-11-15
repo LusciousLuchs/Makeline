@@ -2,6 +2,7 @@
 #pragma once
 #include "raylib.h"
 #include "store.hpp"
+#include "commands.hpp"
 #include "ui.hpp"
 #include "g3d.hpp"
 #include <string>
@@ -37,6 +38,9 @@ struct Game {
     Vector2 cutFrom{0, 0};
     std::vector<Toast> toasts;
     bool paused = false, help = false;
+    int posTab = 2;                      // the order terminal's tab: 0 customer, 1 greeting, 2 pizzas
+    std::vector<pz::Command> cmdLog;     // every player action, in order (the seed of a multiplayer log)
+    bool hud = false;                    // the helper HUD (top bar, hints, patience bars): off for maximum immersion
     bool skipping = false;               // the shop is empty: time runs fast
     bool office = false; int officeTab = 0;   // the manager's office (staff, hiring, the delivery map)
     bool playing = false;                     // a shift is on (not the end-of-day report)
@@ -68,6 +72,13 @@ constexpr float BENCH_X = 0.07f, BOARD_X = -0.45f;  // the pizza on the makeline
 
 // the stations' screens (drawn over the 3D view)
 void registerOverlay();
+bool sendCommand(const pz::Command& c);   // does it (the host applies it), and logs it
+void signRender();                          // the wall sign: clock, rating, the latest review
+Texture2D signTexture();
+void subtitles();                          // what the customer is saying, as subtitles (no panels)
+void posRender();                         // draws the order terminal into its texture, handling the mouse on the monitor
+Texture2D posTexture();
+bool posMouse(Vector2& texturePx);        // where the mouse points on the monitor, in terminal pixels (1024 x 768)
 void makeOverlay();
 void cutOverlay();
 void portionChart();

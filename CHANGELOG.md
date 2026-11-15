@@ -1,5 +1,21 @@
 # Makeline: what's new
 
+## 0.3.0-alpha
+
+- **Maximum immersion.** No top bar, no hints, no patience bars in first person. The time, your rating and the
+  latest review are on a sign on the wall; customers' words appear as subtitles. A switch in the pause menu brings
+  the helper HUD back.
+- **The order terminal is on the register's monitor.** Take orders on a real-looking POS screen in the shop: size,
+  crust, sauce, cheese, toppings, whole or half, light or extra, and Finish to send it.
+- **Customers talk like people.** What they say is built on the spot from their mood, age, the time of day, how
+  long you've kept them waiting and how many times you've made them repeat themselves, and the shop remembers what
+  was said lately so the same line doesn't come round twice. Angry customers swear (a switch turns it off).
+- **Slower, tenser pace.** Fewer orders, more patience, slower talking.
+- **Pan pizzas come in small, medium and large.**
+- **Satire notice and agreement.** A placeholder licence agreement, with a plain note that the game is satire,
+  shows the first time you start it.
+- Groundwork for multiplayer: every player action is now a command that can be sent and replayed.
+
 ## 0.2.0-alpha
 
 - **Real shifts.** The store is open 9 AM to midnight, and your boss gives you a random 8-hour shift each day. You

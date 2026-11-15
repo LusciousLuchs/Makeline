@@ -1,10 +1,12 @@
 // Makeline - customers and everything they say.
 #include "talk.hpp"
+#include "speech.hpp"
 #include <algorithm>
 #include <cctype>
 #include <cmath>
 
 namespace pz {
+bool strongLanguage = true;
 namespace {
 template <size_t N> const char* pick(Rng& r, const char* const (&a)[N]) { return a[r.below((int)N)]; }
 std::string join(const std::vector<std::string>& v) {
@@ -32,6 +34,20 @@ std::string saySize(Rng& r, int size, bool inches) {
     return lower(sizeName(size));
 }
 }  // namespace
+
+std::string heat(Rng& r, const std::string& line, float anger) {
+    if (!strongLanguage || anger < 0.35f || !r.chance(0.35f + 0.6f * std::min(1.f, anger))) return line;
+    static const char* const MILD_BEFORE[] = {"Damn it. ", "Jesus Christ. ", "Oh, hell no. ", "Are you kidding me? ", "Seriously, what the hell? "};
+    static const char* const MILD_AFTER[] = {" This is crap.", " Unbelievable.", " Damn.", " What a joke.", " Are you serious right now?"};
+    static const char* const HARD_BEFORE[] = {"Oh, for fuck's sake. ", "Are you fucking kidding me? ", "Jesus fucking Christ. ", "What the fuck? ", "Goddamn it. ", "You've gotta be shitting me. "};
+    static const char* const HARD_AFTER[] = {" This is bullshit.", " Fucking unbelievable.", " What the hell is wrong with you people?", " I'm so damn tired of this shit.", " Are you fucking stupid?", " Un-fucking-believable.", " Pathetic."};
+    bool hard = anger > 0.65f && r.chance(0.7f);
+    bool before = r.chance(0.5f);
+    std::string out = line;
+    if (before) out = std::string(hard ? pick(r, HARD_BEFORE) : pick(r, MILD_BEFORE)) + line;
+    else out += hard ? pick(r, HARD_AFTER) : pick(r, MILD_AFTER);
+    return out;
+}
 
 Person makePerson(Rng& rng) {
     // first names by background and sex (men, then women), so the town looks like a town
@@ -68,7 +84,7 @@ Spec randomPizza(Rng& rng, int day) {
     f = rng.f();
     s.crust = f < 0.65f ? HAND : f < 0.87f ? THIN : PAN;
     if (s.crust == THIN && !crustComesIn(THIN, s.size)) s.size = rng.chance(0.5f) ? MEDIUM : LARGE;
-    if (s.crust == PAN) s.size = MEDIUM;
+    if (s.crust == PAN && s.size == XLARGE) s.size = LARGE;
     if (rng.chance(day <= 1 ? 0.2f : 0.35f)) s.sauce = 1 + rng.below(3);
     if (day >= 2) { f = rng.f(); if (f < 0.12f) s.sauceLevel = LIGHT; else if (f < 0.24f) s.sauceLevel = EXTRA; }
     if (day >= 2) {
@@ -110,41 +126,45 @@ std::vector<Spec> randomOrder(Rng& rng, int day) {
 }
 
 std::string speakPizza(Rng& r, const Spec& s, bool inches) {
-    std::string out = saySize(r, s.size, inches);
-    if (s.crust == THIN) out += " thin crust";
-    else if (s.crust == PAN) out += " pan pizza";
-    else if (r.chance(0.3f)) out += " hand tossed";
-    // sauce
+    std::string sz = saySize(r, s.size, inches), cr, sauceC, cheeseC, topsC;
+    if (s.crust == THIN) cr = r.chance(0.5f) ? "thin crust" : "thin";
+    else if (s.crust == PAN) cr = r.chance(0.5f) ? "pan pizza" : "pan";
+    else if (r.chance(0.3f)) cr = "hand tossed";
     if (s.sauce != MARINARA) {
         std::string n = sayIng(r, s.sauce);
-        if (s.sauceLevel == LIGHT) out += ", light on the " + n;
-        else if (s.sauceLevel == EXTRA) out += ", extra " + n;
-        else out += r.chance(0.5f) ? ", with " + n : ", " + n + " instead of the red";
-    } else if (s.sauceLevel == LIGHT) out += r.chance(0.5f) ? ", light sauce" : ", easy on the sauce";
-    else if (s.sauceLevel == EXTRA) out += ", extra sauce";
-    // cheese
+        if (s.sauceLevel == LIGHT) sauceC = "light on the " + n;
+        else if (s.sauceLevel == EXTRA) sauceC = "extra " + n;
+        else sauceC = r.chance(0.5f) ? "with " + n : n + " instead of the red";
+    } else if (s.sauceLevel == LIGHT) sauceC = r.chance(0.5f) ? "light sauce" : "easy on the sauce";
+    else if (s.sauceLevel == EXTRA) sauceC = r.chance(0.5f) ? "extra sauce" : "lots of sauce";
     const Item* mz = s.find(MOZZ);
-    if (!mz) out += ", no cheese";
-    else if (mz->level == LIGHT) out += r.chance(0.5f) ? ", light cheese" : ", easy on the cheese";
-    else if (mz->level == EXTRA) out += ", extra cheese";
-    // toppings
+    if (!mz) cheeseC = r.chance(0.5f) ? "no cheese" : "hold the cheese";
+    else if (mz->level == LIGHT) cheeseC = r.chance(0.5f) ? "light cheese" : "easy on the cheese";
+    else if (mz->level == EXTRA) cheeseC = r.chance(0.5f) ? "extra cheese" : "double up on the cheese";
     std::vector<std::string> W, L, R;
     for (auto& i : s.items) {
         if (i.ing == MOZZ) continue;
         (i.part == WHOLE ? W : i.part == LEFT ? L : R).push_back(sayItem(r, i));
     }
     if (W.empty() && L.empty() && R.empty()) {
-        if (mz && mz->level == NORMAL && s.sauce == MARINARA && s.sauceLevel == NORMAL) out += r.chance(0.5f) ? ", just cheese" : ", plain cheese";
-        else out += ", nothing else on it";
+        if (mz && mz->level == NORMAL && s.sauce == MARINARA && s.sauceLevel == NORMAL) topsC = r.chance(0.5f) ? "just cheese" : "plain cheese";
+        else topsC = "nothing else on it";
     } else if (!L.empty() && !R.empty()) {
-        out += ", half " + join(L) + " and half " + join(R);
-        if (!W.empty()) out += ", and " + join(W) + " on the whole thing";
+        topsC = "half " + join(L) + " and half " + join(R);
+        if (!W.empty()) topsC += ", and " + join(W) + " on the whole thing";
     } else if (!L.empty() || !R.empty()) {
         auto& H = L.empty() ? R : L;
-        if (!W.empty()) out += ", with " + join(W) + ", and " + join(H) + " on just half";
-        else out += ", with " + join(H) + " on only half of it";
-    } else out += ", with " + join(W);
-    return out;
+        if (!W.empty()) topsC = "with " + join(W) + ", and " + join(H) + " on just half";
+        else topsC = "with " + join(H) + " on only half of it";
+    } else topsC = r.chance(0.5f) ? "with " + join(W) : join(W) + " on it";
+    auto list = [](std::vector<std::string> v) { std::string o; for (auto& x : v) if (!x.empty()) o += (o.empty() ? "" : ", ") + x; return o; };
+    std::string head = sz + (cr.empty() ? "" : " " + cr);
+    int pattern = r.below(3);
+    bool lead = topsC.compare(0, 4, "with") == 0 || topsC.compare(0, 4, "half") == 0 || topsC.compare(0, 4, "just") == 0 || topsC.compare(0, 5, "plain") == 0 || topsC.compare(0, 7, "nothing") == 0;
+    std::string withT = lead ? topsC : "with " + topsC;
+    if (pattern == 0) return list({head, sauceC, cheeseC, topsC});
+    if (pattern == 1) return sz + " " + withT + (cr.empty() ? "" : ", " + cr) + (sauceC.empty() && cheeseC.empty() ? "" : ", " + list({sauceC, cheeseC}));
+    return list({sz, cr, topsC, sauceC, cheeseC});
 }
 
 std::string streetAddress(Rng& r) {
@@ -153,21 +173,15 @@ std::string streetAddress(Rng& r) {
     return std::to_string(100 + r.below(8900)) + " " + pick(r, ST) + " " + pick(r, KIND);
 }
 
-std::vector<std::string> orderScript(Rng& r, const Person& who, const std::vector<Spec>& want, int service, bool phone, int day) {
+std::vector<std::string> orderScript(Rng& r, const Person& who, const std::vector<Spec>& want, int service, bool phone, int day, int hour) {
     std::vector<std::string> L;
-    static const char* const HELLO_PHONE_DEL[] = {"Yeah. I need a delivery.", "Delivery. And don't take an hour this time.", "Hi. Delivery. You got a pen?", "I want it delivered. Today, preferably."};
-    static const char* const HELLO_PHONE_CARRY[] = {"Yeah, order for pickup.", "Carryout. I'm already in the car.", "Pickup. I'll be there in like five minutes so hurry.", "I'm picking it up. Don't make me wait."};
-    static const char* const HELLO_COUNTER[] = {"Finally.", "Yeah, hi.", "About time. Okay.", "You open or what? Okay.", "Hey. Quick order."};
-    static const char* const OPEN[] = {"Gimme a ", "Lemme get a ", "I need a ", "I want a ", "Give me a "};
-    static const char* const NEXT[] = {"And then a ", "Also a ", "And another one, a ", "Plus a "};
-    static const char* const DONE[] = {"That's it.", "That's all.", "That's everything.", "And that's it."};
-    static const char* const SNARK[][3] = {
-        {"And hurry it up, I got places to be.", "How long? No, don't tell me. Just hurry.", "I don't have all day."},
-        {"...you get all that?", "Mhm. Yeah. That.", "Whatever, just make it."},
-        {"I think that's right. Yeah. Probably.", "Don't mess it up, I'm not saying it again.", "Was that right? You wrote it down, right?"},
-        {"And it better be right this time.", "Last time it was wrong. I WILL be checking.", "I know the owner, so. Get it right."}};
-    if (phone) L.push_back(service == DELIVERY ? pick(r, HELLO_PHONE_DEL) : pick(r, HELLO_PHONE_CARRY));
-    else L.push_back(pick(r, HELLO_COUNTER));
+    Ctx c;
+    c.who = &who; c.phone = phone; c.service = service; c.hour = hour;
+    c.anger = who.mood == 3 ? 0.55f : who.mood == 0 ? 0.3f : 0.1f;
+    c.v["svc"] = service == DELIVERY ? "delivery" : "pickup";
+    bool chatty = (who.look % 3) == 0;
+    L.push_back(heat(r, gen(r, phone ? "greet_phone" : "greet_counter", c), c.anger));
+    if (r.chance(chatty ? 0.55f : 0.12f)) { std::string a = gen(r, "aside", c); if (!a.empty()) L.push_back(a); }
 
     int twist = -1, twistKind = 0;   // one change of mind an order, from the second day on
     if (day >= 2 && r.chance(who.mood == 2 ? 0.7f : 0.3f)) { twist = r.below((int)want.size()); twistKind = r.below(3); }
@@ -187,20 +201,31 @@ std::vector<std::string> orderScript(Rng& r, const Person& who, const std::vecto
                 Item* it = said.find(x);
                 Item real = *it;
                 it->ing = decoy; it->level = NORMAL;
-                fix = std::string(r.chance(0.5f) ? "Actually, no " : "Wait. Not ") + info(decoy).say + ". Make that " + sayItem(r, real) + ".";
+                static const char* const F0[] = {"Actually, no %s. Make that %s.", "Wait. Not %s. %s.", "Sorry, scratch the %s, I meant %s.", "Hold on, I said %s? No, %s.", "No no, not the %s. The %s."};
+                char b[200]; std::string a = info(decoy).say, rl = sayItem(r, real);
+                snprintf(b, sizeof b, pick(r, F0), a.c_str(), rl.c_str());
+                fix = b;
             } else if (twistKind == 1 && decoy >= 0) {   // adds one, then takes it back
                 said.items.push_back({decoy, WHOLE, NORMAL});
-                fix = std::string(r.chance(0.5f) ? "You know what, forget the " : "No, scratch the ") + info(decoy).say + ".";
+                static const char* const F1[] = {"You know what, forget the %s.", "No, scratch the %s.", "Actually, leave off the %s.", "Wait, no %s. Never mind that.", "Take the %s off, I changed my mind."};
+                char b[160]; snprintf(b, sizeof b, pick(r, F1), info(decoy).say);
+                fix = b;
             } else {   // the wrong size first
                 int other = truth.size;
                 for (int t = 0; t < 20 && (other == truth.size || !crustComesIn(truth.crust, other)); t++) other = r.below(SIZE_N);
                 if (other != truth.size && crustComesIn(truth.crust, other)) {
                     said.size = other;
-                    fix = std::string(r.chance(0.5f) ? "Actually make that a " : "No wait. A ") + saySize(r, truth.size, false) + ". Same stuff.";
+                    static const char* const F2[] = {"Actually make that %s %s. Same stuff.", "No wait. %s %s.", "Sorry, I want %s %s, not that one.", "Hang on, make it %s %s.", "Let's bump that to %s %s instead."};
+                    std::string sz = saySize(r, truth.size, false);
+                    char b[160]; snprintf(b, sizeof b, pick(r, F2), article(sz).c_str(), sz.c_str());
+                    fix = b;
                 }
             }
         }
-        std::string line = (k == 0 ? pick(r, OPEN) : pick(r, NEXT)) + speakPizza(r, said, r.chance(0.15f)) + ".";
+        c.v["nth"] = std::to_string(k + 1);
+        std::string verb = gen(r, k == 0 ? "ask_first" : "ask_next", c);
+        std::string desc = speakPizza(r, said, r.chance(0.15f));
+        std::string line = verb + genRaw(r, "tic_", c) + " " + article(desc) + " " + desc + ".";
         if ((int)k == garble) {   // the phone cuts out over one topping
             for (auto& i : said.items) {
                 if (i.ing == MOZZ) continue;
@@ -214,71 +239,80 @@ std::vector<std::string> orderScript(Rng& r, const Person& who, const std::vecto
         size_t cut = line.find(", ", line.size() / 2);
         if (line.size() > 70 && cut != std::string::npos) {
             L.push_back(line.substr(0, cut + 1));
-            std::string rest = line.substr(cut + 2);
-            rest[0] = (char)std::toupper((unsigned char)rest[0]);
-            L.push_back(rest);
+            L.push_back(line.substr(cut + 2));   // (carries on mid-sentence, so it starts in lower case)
         } else L.push_back(line);
-        if (!fix.empty()) L.push_back(fix);
+        if (!fix.empty()) L.push_back(tidyText(fix));
     }
-    std::string end = pick(r, DONE);
-    if (phone && service == DELIVERY) end += " It's " + streetAddress(r) + ".";
-    L.push_back(end);
-    L.push_back(SNARK[who.mood & 3][r.below(3)]);
+    L.push_back(heat(r, gen(r, "closing", c), c.anger));
+    if (phone && service == DELIVERY) { c.v["addr"] = streetAddress(r); L.push_back(gen(r, "addr", c)); }
+    std::string after = gen(r, "after", c);
+    if (!after.empty()) L.push_back(heat(r, after, who.mood == 3 ? 0.85f : who.mood == 0 ? 0.5f : 0.1f));
     return L;
 }
 
-std::string recap(Rng& r, const std::vector<Spec>& want, int service, bool phone) {
-    static const char* const PRE[] = {"Are you serious? Fine. ", "Oh my GOD. Listen this time. ", "I JUST told you. ", "Hello?? Pay attention. ", "Unbelievable. One more time: "};
-    static const char* const POST[] = {" Got it?", " Was that slow enough for you?", " Write it DOWN.", " Okay?!"};
-    std::string s = pick(r, PRE);
-    if (phone) s += service == DELIVERY ? "DELIVERY. " : "PICKUP. ";
+std::string recap(Rng& r, const std::vector<Spec>& want, int service, bool phone, const Ctx* ctx) {
+    Ctx c;
+    if (ctx) c = *ctx;
+    c.phone = phone; c.service = service;
+    if (c.asks < 1) c.asks = 1;
+    std::string s = gen(r, "recap_pre", c);
+    if (!s.empty()) s += " ";
+    if (phone) s += service == DELIVERY ? "It's for delivery. " : "It's for pickup. ";
     for (size_t k = 0; k < want.size(); k++) {
         if (want.size() > 1) s += (k == 0 ? "First one: " : k == 1 ? "Second one: " : "Third one: ");
         std::string p = speakPizza(r, want[k], false);
         p[0] = (char)std::toupper((unsigned char)p[0]);
         s += p + ". ";
     }
-    s.pop_back();
-    return s + pick(r, POST);
+    std::string post = gen(r, "recap_post", c);
+    if (post.empty()) s.pop_back();
+    else s += post;
+    return s;
 }
 
-std::string readBack(Rng& r, const std::vector<Spec>& want, const std::vector<Spec>& entered, int wantService, int enteredService, bool phone, bool& ok) {
+std::string readBack(Rng& r, const std::vector<Spec>& want, const std::vector<Spec>& entered, int wantService, int enteredService, bool phone, bool& ok, const Ctx* ctx) {
     ok = false;
-    static const char* const NO[] = {"No! ", "NO. ", "What? No. ", "Are you even listening? ", "Wrong. "};
-    std::string no = pick(r, NO);
-    if (phone && wantService != enteredService) return no + (wantService == DELIVERY ? "I said DELIVERY. I'm not driving down there." : "I said PICKUP. I'm coming to get it.");
-    if (entered.size() < want.size()) return no + "I ordered " + std::to_string(want.size()) + " pizzas. You're missing one.";
-    if (entered.size() > want.size()) return no + "I only ordered " + std::to_string(want.size()) + (want.size() == 1 ? " pizza." : " pizzas.") + " I'm not paying for extra.";
+    Ctx c;
+    if (ctx) c = *ctx;
+    c.phone = phone; c.service = wantService;
+    std::string no = gen(r, "no_open", c);
+    auto say = [&](const char* key) { return no + " " + gen(r, key, c); };
+    if (phone && wantService != enteredService) return say(wantService == DELIVERY ? "wrong_svc_d" : "wrong_svc_c");
+    c.v["n"] = std::to_string(want.size()); c.v["m"] = std::to_string(entered.size());
+    if (entered.size() < want.size()) return say("too_few");
+    if (entered.size() > want.size()) return say("too_many");
     for (size_t k = 0; k < want.size(); k++) {
         const Spec& w = want[k];
-        // their half-and-half has no left: take whichever way round matches best
         Spec e = entered[k];
         auto diff = [&](const Spec& x) { int d = 0; for (auto& i : w.items) { const Item* j = x.find(i.ing); if (!j || j->part != i.part) d++; } return d; };
         if (diff(mirrored(e)) < diff(e)) e = mirrored(e);
-        std::string which = want.size() > 1 ? (k == 0 ? " on the first one" : k == 1 ? " on the second one" : " on the third one") : "";
-        if (e.size != w.size) return no + "I said " + upper(sizeName(w.size)) + which + ".";
-        if (e.crust != w.crust) return no + "I said " + upper(crustName(w.crust)) + (w.crust == HAND ? "" : " crust") + which + ".";
-        if (e.sauce != w.sauce) return no + "It's " + upper(info(w.sauce).say) + which + ".";
-        if (e.sauceLevel != w.sauceLevel) return no + "I said " + upper(levelName(w.sauceLevel)) + " sauce" + which + ".";
+        c.v["which"] = want.size() > 1 ? (k == 0 ? " on the first one" : k == 1 ? " on the second one" : " on the third one") : "";
+        if (e.size != w.size) { c.v["size"] = upper(sizeName(w.size)); return say("wrong_size"); }
+        if (e.crust != w.crust) { c.v["crust"] = upper(crustName(w.crust)); return say("wrong_crust"); }
+        if (e.sauce != w.sauce) { c.v["sauce"] = upper(info(w.sauce).say); return say("wrong_sauce"); }
+        if (e.sauceLevel != w.sauceLevel) { c.v["level"] = upper(levelName(w.sauceLevel)); return say("wrong_slevel"); }
         for (auto& i : w.items) {
             const Item* j = e.find(i.ing);
-            std::string n = info(i.ing).say;
-            if (!j) return no + "Where's the " + n + which + "?";
-            if (j->level != i.level) return no + "I said " + upper(levelName(i.level)) + " " + n + which + ".";
-            if (j->part != i.part) return no + (i.part == WHOLE ? "The " + n + " goes on the WHOLE pizza" : "The " + n + " is only on HALF") + which + ".";
+            c.v["top"] = info(i.ing).say;
+            if (!j) return say("missing_top");
+            if (j->level != i.level) { c.v["level"] = upper(levelName(i.level)); return say("wrong_level"); }
+            if (j->part != i.part) { c.v["where"] = i.part == WHOLE ? "on the WHOLE pizza" : "on only HALF of it"; return say("wrong_part"); }
         }
-        for (auto& j : e.items) if (!w.find(j.ing)) return no + "I never said " + (j.ing == MOZZ ? std::string("cheese. NO cheese") : std::string(info(j.ing).say)) + which + "!";
+        for (auto& j : e.items) if (!w.find(j.ing)) {
+            if (j.ing == MOZZ) return say("extra_cheese");
+            c.v["top"] = info(j.ing).say;
+            return say("extra_top");
+        }
     }
     ok = true;
-    static const char* const YES[] = {"Yes. That's what I said.", "Yeah. Finally.", "That's right. Was that so hard?", "Mhm. Go make it.", "Yes! Can we move this along?"};
-    return pick(r, YES);
+    return gen(r, "ok_back", c);
 }
 
-std::string waitingBark(Rng& r, float patience) {
-    static const char* const MILD[] = {"How long's this gonna take?", "*checks phone*", "*sighs loudly*", "It's just pizza...", "Is anyone working here?", "*taps foot*"};
-    static const char* const MAD[] = {"I've been standing here FOREVER.", "This is ridiculous.", "Hello?! My pizza?", "I could've made it myself by now.", "Where's your manager?",
-        "I'm never coming back here.", "Do you people even care?", "Un-be-lievable."};
-    return patience < 0.4f ? pick(r, MAD) : pick(r, MILD);
+std::string waitingBark(Rng& r, float patience, const Ctx* ctx) {
+    Ctx c;
+    if (ctx) c = *ctx;
+    c.anger = 1 - patience;
+    return heat(r, gen(r, "bark", c), 1 - patience);
 }
 
 std::string issueLine(const Issue& is) {
@@ -317,10 +351,8 @@ std::string issueLine(const Issue& is) {
 
 std::string reviewText(Rng& r, const Score& score, int stars) {
     if (score.issues.empty() || stars >= 5) {
-        static const char* const GOOD[] = {"It was fine. Pizza was actually right for once.", "Fast, hot, and what I ordered. Shocked.", "No complaints. Which is rare for me.",
-            "Good pizza. Kid at the counter looked tired though.", "They got it right. Five stars, I guess.", "Honestly the best one in town. Don't tell them I said that.",
-            "Hot and correct. That's all I ask.", "Came out perfect. Somebody back there knows what they're doing."};
-        return pick(r, GOOD);
+        Ctx c; static const char* const TOD[] = {"morning", "afternoon", "evening", "night"}; c.v["tod"] = TOD[r.below(4)];
+        return gen(r, "review_good", c);
     }
     // the two worst things, in their words
     std::vector<Issue> is = score.issues;
@@ -364,7 +396,7 @@ std::string reviewText(Rng& r, const Score& score, int stars) {
     }
     static const char* const END1[] = {" Never again.", " Do better.", " Zero stars if I could.", " Calling corporate.", " Unreal."};
     static const char* const END3[] = {" Meh.", " Not great.", " Expected better.", ""};
-    if (stars <= 2) out += pick(r, END1);
+    if (stars <= 2) out = heat(r, out, 0.9f) + pick(r, END1);
     else if (stars == 3) out += pick(r, END3);
     else out += " Otherwise okay.";
     return out;

@@ -15,6 +15,11 @@ const g3::Frame CUT_F{{2.55f, 0.92f, 5.45f}, 180};
 
 namespace {
 const float EYE = 1.62f;
+// the register's monitor: a 4:3 screen on a stand, tilted back 18 degrees, showing the order terminal
+const float MON_W = 0.64f, MON_H = 0.48f, TILT = -18.f, D2RR = 0.0174533f;
+const Vector3 MON_C{-0.55f, 1.43f, 0.02f};
+Vector3 monN() { return {0, -std::sin(TILT * D2RR), std::cos(TILT * D2RR)}; }
+Vector3 monUp() { return {0, std::cos(TILT * D2RR), std::sin(TILT * D2RR)}; }
 const Vector3 REG_SPOT{-1.2f, 0, -0.95f}, DOOR{3.6f, 0, -5.7f}, PHONE{1.6f, 1.06f, 0.02f}, REGISTER{-0.55f, 1.2f, 0.05f};
 struct Target { int kind; int id; Vector3 at; float reach; std::string label; };   // kind 0 register, 1 phone, 2 makeline, 3 cut table, 4 a customer
 int facing = -1;
@@ -32,7 +37,18 @@ Camera3D wanted() {
     } else if (G.mode == M_CUT) {
         c.position = CUT_F.at(0, 1.3f, 0.32f); c.target = CUT_F.at(0, 0, 0.02f); c.up = CUT_F.dir(0, 0, -1); c.fovy = 45;
     } else if (G.mode == M_REGISTER) {
-        c.position = {-0.5f, 1.62f, 0.95f}; c.target = {-0.55f, 1.5f, -1.0f}; c.fovy = 55;
+        // straight at the monitor, placed so the terminal fills the right side of the screen and the customer
+        // and what they're saying fit on the left
+        Vector3 n = monN(), up = monUp();
+        float W = (float)GetScreenWidth(), H = (float)GetScreenHeight(), tanV = std::tan(45 * 0.5f * D2RR);
+        Vector2 ra = ui::toScreen({918, 104}), rb = ui::toScreen({1584, 604});
+        float rh = rb.y - ra.y, cx = (ra.x + rb.x) / 2, cy = (ra.y + rb.y) / 2;
+        float d = H * MON_H / (2 * tanV * rh);
+        Vector3 sc{MON_C.x + n.x * 0.0255f, MON_C.y + n.y * 0.0255f, MON_C.z + n.z * 0.0255f};   // the glass, a little proud of the bezel
+        float X = (cx - W / 2) / (H / 2) * d * tanV, Y = (H / 2 - cy) / (H / 2) * d * tanV;
+        Vector3 axis{sc.x - X, sc.y - up.y * Y, sc.z - up.z * Y};
+        c.position = {axis.x + n.x * d, axis.y + n.y * d, axis.z + n.z * d};
+        c.target = axis; c.up = up; c.fovy = 45;
     } else {
         c.position = {G.px, EYE, G.pz};
         float cp = std::cos(G.pitch);
@@ -150,6 +166,51 @@ Vector2 binSpot(int ing) {
     return {0.40f + (k % 3) * P, -0.228f + (k / 3) * P};
 }
 
+bool posMouse(Vector2& out) {
+    Ray r = GetScreenToWorldRay(ui::toScreen(ui::M), G.cam);
+    Vector3 n = monN(), up = monUp();
+    float den = r.direction.x * n.x + r.direction.y * n.y + r.direction.z * n.z;
+    if (std::fabs(den) < 1e-5f) return false;
+    Vector3 sc{MON_C.x + n.x * 0.0255f, MON_C.y + n.y * 0.0255f, MON_C.z + n.z * 0.0255f};
+    float t = ((sc.x - r.position.x) * n.x + (sc.y - r.position.y) * n.y + (sc.z - r.position.z) * n.z) / den;
+    if (t < 0) return false;
+    Vector3 d{r.position.x + r.direction.x * t - sc.x, r.position.y + r.direction.y * t - sc.y, r.position.z + r.direction.z * t - sc.z};
+    float u = d.x / MON_W + 0.5f, v = 0.5f - (d.x * up.x + d.y * up.y + d.z * up.z) / MON_H;
+    if (u < 0 || u > 1 || v < 0 || v > 1) return false;
+    out = {u * 1024, v * 768};
+    return true;
+}
+
+namespace {
+RenderTexture2D gSign{};
+bool gSignMade = false;
+}
+Texture2D signTexture() {
+    if (!gSignMade) { gSign = LoadRenderTexture(512, 266); SetTextureFilter(gSign.texture, TEXTURE_FILTER_BILINEAR); gSignMade = true; }
+    return gSign.texture;
+}
+void signRender() {
+    signTexture();
+    Store& S = G.S;
+    BeginTextureMode(gSign);
+    ClearBackground({18, 20, 26, 255});
+    ui::text(S.clock(), 22, 8, 64, {255, 206, 90, 255});
+    ui::text("Shift ends " + Store::timeText(S.shiftEnd()), 24, 84, 24, {200, 204, 214, 255});
+    float rt = S.rating();
+    ui::stars(20, 118, 40, rt, {70, 72, 84, 255});
+    char b[48];
+    if (rt > 0) snprintf(b, sizeof b, "%.1f", rt); else snprintf(b, sizeof b, "no reviews");
+    ui::text(b, 262, 124, 30, ui::PAPER);
+    int rp = S.reprimandsThisWeek();
+    if (rp) { snprintf(b, sizeof b, "Reprimands %d/3", rp); ui::text(b, 490, 124, 24, {240, 100, 90, 255}, 2); }
+    if (!S.reviews.empty()) {
+        auto& r = S.reviews.back();
+        DrawRectangle(10, 170, 492, 2, {60, 64, 76, 255});
+        ui::wrap("\"" + r.text + "\"", 20, 178, 472, 22, {200, 204, 214, 255}, true, 90);
+    }
+    EndTextureMode();
+}
+
 void worldUpdate(float dt) {
     Store& S = G.S;
     people(dt);
@@ -235,6 +296,18 @@ void room() {
         box({x, 1.02f, -6.065f}, {2.34f, 0.2f, 0.04f}, {70, 70, 80, 255});
         box({x, 1.75f, -6.05f}, {0.06f, 1.6f, 0.04f}, {60, 44, 38, 255});
     }
+    {   // a digital sign on the front wall: the time, your rating and the latest review
+        box({2.0f, 2.0f, -6.07f}, {1.78f, 0.93f, 0.05f}, {30, 30, 36, 255});
+        rlSetTexture(signTexture().id);
+        rlBegin(RL_QUADS);
+        rlColor4ub(255, 255, 255, 255); rlNormal3f(0, 0, 0);
+        rlTexCoord2f(0, 0); rlVertex3f(1.12f, 1.56f, -6.04f);
+        rlTexCoord2f(1, 0); rlVertex3f(2.88f, 1.56f, -6.04f);
+        rlTexCoord2f(1, 1); rlVertex3f(2.88f, 2.44f, -6.04f);
+        rlTexCoord2f(0, 1); rlVertex3f(1.12f, 2.44f, -6.04f);
+        rlEnd();
+        rlSetTexture(0);
+    }
     box({DOOR.x, 1.1f, -6.09f}, {1.2f, 2.2f, 0.06f}, {60, 44, 38, 255});
     box({DOOR.x, 1.3f, -6.06f}, {1.0f, 1.6f, 0.04f}, low);
     box({DOOR.x - 0.4f, 1.05f, -6.02f}, {0.05f, 0.3f, 0.05f}, {220, 200, 120, 255});
@@ -284,12 +357,20 @@ void room() {
     }
     box({REGISTER.x, 1.09f, 0.08f}, {0.34f, 0.08f, 0.3f}, {60, 64, 74, 255});
     rlPushMatrix();
-    rlTranslatef(REGISTER.x, 1.28f, 0.02f);
-    rlRotatef(-18, 1, 0, 0);
-    box({0, 0, 0}, {0.44f, 0.32f, 0.03f}, {50, 54, 62, 255});
-    box({0, 0, 0.017f}, {0.4f, 0.28f, 0.004f}, S.talk.active() ? Color{236, 240, 226, 255} : Color{150, 214, 190, 255});
+    rlTranslatef(MON_C.x, MON_C.y, MON_C.z);
+    rlRotatef(TILT, 1, 0, 0);
+    box({0, 0, 0}, {MON_W + 0.06f, MON_H + 0.06f, 0.05f}, {40, 44, 52, 255});
+    rlSetTexture(posTexture().id);   // the order terminal, drawn each frame into its own picture
+    rlBegin(RL_QUADS);
+    rlColor4ub(255, 255, 255, 255); rlNormal3f(0, 0, 0);
+    rlTexCoord2f(0, 0); rlVertex3f(-MON_W / 2, -MON_H / 2, 0.0255f);
+    rlTexCoord2f(1, 0); rlVertex3f(MON_W / 2, -MON_H / 2, 0.0255f);
+    rlTexCoord2f(1, 1); rlVertex3f(MON_W / 2, MON_H / 2, 0.0255f);
+    rlTexCoord2f(0, 1); rlVertex3f(-MON_W / 2, MON_H / 2, 0.0255f);
+    rlEnd();
+    rlSetTexture(0);
     rlPopMatrix();
-    box({REGISTER.x, 1.14f, 0.05f}, {0.05f, 0.2f, 0.05f}, {60, 64, 74, 255});
+    box({MON_C.x, 1.17f, 0.06f}, {0.06f, 0.2f, 0.05f}, {60, 64, 74, 255});
     bool ring = S.ringing() >= 0, onPhone = S.talk.active() && S.cust(S.talk.cust) && S.cust(S.talk.cust)->phone;
     float j = ring ? std::sin(ui::time * 70) * 0.008f : 0;
     box({PHONE.x + j, 1.08f, PHONE.z}, {0.2f, 0.06f, 0.24f}, {54, 54, 62, 255});
@@ -436,9 +517,9 @@ void worldHud() {
             if (!c || c->state == C_DONE || !project({v.x, 1.95f, v.z}, p)) continue;
             if (G.mode == M_REGISTER && p.x > 930) continue;   // behind the order screen
             Order* o = S.order(c->order);
-            bar(p.x, p.y, 70, c->patience);
+            if (G.hud) bar(p.x, p.y, 70, c->patience);
             float y = p.y - 8;
-            if (o) {
+            if (o && G.hud) {
                 char b[32];
                 bool ready = o->ready && !o->done;
                 float mins = o->minutes(S.t);
@@ -452,7 +533,7 @@ void worldHud() {
         }
         Vector2 p;
         int ring = S.ringing();
-        if (ring >= 0 && project({PHONE.x, 1.4f, PHONE.z}, p) && !(G.mode == M_REGISTER && p.x > 930)) {
+        if (G.hud && ring >= 0 && project({PHONE.x, 1.4f, PHONE.z}, p) && !(G.mode == M_REGISTER && p.x > 930)) {
             float pulse = 0.5f + 0.5f * std::sin(ui::time * 14);
             ui::text("RING!", p.x - 40 - pulse * 8, p.y - 40, 30, ui::RED, 1);
             ui::text("RING!", p.x + 50 + pulse * 8, p.y - 60, 24, ui::RED, 1);
@@ -463,15 +544,20 @@ void worldHud() {
     // the crosshair and what E does
     DrawCircleV({800, 450}, 5, INK);
     DrawCircleV({800, 450}, 3, G.prompt.empty() ? ui::PAPER : ui::YELLOW);
-    if (!G.prompt.empty()) {
+    if (!G.prompt.empty() && !G.hud) DrawRing({800, 450}, 11, 14, 0, 360, 24, ui::YELLOW);   // you can use what you're looking at
+    if (!G.prompt.empty() && G.hud) {
         float w = ui::textW(G.prompt, 26) + 110;
         ui::panel({800 - w / 2, 520, w, 50}, ui::CREAM, 12, 3, true);
         ui::panel({800 - w / 2 + 10, 528, 34, 34}, ui::YELLOW, 8, 2, false);
         ui::text("E", 800 - w / 2 + 27, 532, 26, INK, 1);
         ui::text(G.prompt, 800 - w / 2 + 58, 532, 26, INK);
     }
+    if (!G.hud) {   // maximum immersion: no bars, no chips, no prompts
+        if (S.t < 30 && S.day == 1) ui::text("WASD walk    Mouse look    E use    M manager's office    Esc pause", 800, 860, 22, {255, 250, 238, 220}, 1);
+        return;
+    }
     // what needs you, wherever you're looking
-    float y = 80;
+    float y = 16;
     auto chip = [&](const std::string& s, Color c, bool flash) {
         if (flash && std::fmod(ui::time, 0.6f) < 0.3f) c = ui::shade(c, 1.25f);
         float w = ui::textW(s, 22) + 28;

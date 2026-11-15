@@ -18,7 +18,7 @@ Download the newest zip from the Releases page, unzip it anywhere, run `makeline
 | Shift | Hurry |
 | M | Manager's office: staff, hiring, the delivery map |
 | Tab | Portion chart (at the makeline) |
-| Esc | Step back from a station / pause |
+| Esc | Step back from a station / pause (strong language and the helper HUD switch here) |
 | F11 | Fullscreen |
 
 ## Building

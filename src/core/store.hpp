@@ -3,6 +3,7 @@
 #pragma once
 #include "talk.hpp"
 #include "roads.hpp"
+#include "speech.hpp"
 #include <string>
 #include <vector>
 
@@ -30,6 +31,7 @@ struct Customer {
     std::string bark; float barkT = 0, nextBark = 6;   // what they're muttering in the lobby
     float leaving = 0;              // > 0: walking out (for the drawing)
     int leftStars = 0;              // how they left: 0 angry and unserved
+    int asks = 0;                   // times you've made them repeat or read back, so they get shorter with you
     int server = -1;                // the staff member taking their order (-1: you, or nobody yet)
     int addr = -1;                  // where they live on the road map (deliveries)
 };
@@ -102,6 +104,7 @@ struct Store {
     bool fired = false;
     std::vector<Worker> staff, applicants;
     uint64_t hireSeed = 99;
+    SpeechMemory speech;            // what customers said lately, so they don't repeat themselves
     bool crewSet = false;           // the store's first driver has been given
 
     // ---- this shift
@@ -187,6 +190,7 @@ private:
     void lose(Customer& c, int code);
     void review(const Customer& c, const Score& sc, int stars);
     void say(const std::string& line);
+    Ctx voice(const Customer& c) const;
     void place(Customer& c, const std::vector<Spec>& entered, int service, int takenBy);
     void staffStep(float dt);
     void sendDriver(int w);

@@ -42,7 +42,7 @@ float levelMult(int l) { static const float M[] = {0, 0.5f, 1, 1.5f}; return M[s
 int slicesFor(int size) { return size == SMALL ? 6 : 8; }
 bool crustComesIn(int crust, int size) {
     if (crust == THIN) return size == MEDIUM || size == LARGE;
-    if (crust == PAN) return size == MEDIUM;
+    if (crust == PAN) return size <= LARGE;
     return true;
 }
 

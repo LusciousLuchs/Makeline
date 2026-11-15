@@ -7,6 +7,13 @@
 
 namespace pz {
 
+Ctx Store::voice(const Customer& c) const {
+    Ctx x;
+    x.who = &c.who; x.anger = std::clamp(1 - c.patience, 0.f, 1.f); x.service = c.service; x.phone = c.phone; x.asks = c.asks;
+    x.hour = ((int)(clockMin() / 60)) % 24;
+    for (auto& o : orders) if (o.num == c.order) x.minutes = o.minutes(t);
+    return x;
+}
 Customer* Store::cust(int id) { for (auto& c : custs) if (c.id == id) return &c; return nullptr; }
 Order* Store::order(int num) { for (auto& o : orders) if (o.num == num) return &o; return nullptr; }
 Ticket* Store::ticket(int id) { for (auto& k : tickets) if (k.id == id) return &k; return nullptr; }
@@ -206,7 +213,7 @@ void Store::staffStep(float dt) {
                 int kind = rng.below(4);
                 std::vector<int> tops;
                 for (auto& it : sp.items) if (it.ing != MOZZ) tops.push_back(it.ing);
-                if (kind == 0 || (kind == 1 && tops.empty())) { int z = sp.size; while (z == sp.size || !crustComesIn(sp.crust, z)) { z = rng.below(SIZE_N); if (sp.crust == PAN) break; } if (z != sp.size) sp.size = z; else sp.items.push_back({PINEAPPLE, WHOLE, NORMAL}); }
+                if (kind == 0 || (kind == 1 && tops.empty())) { int z = sp.size; for (int tries = 0; tries < 20 && (z == sp.size || !crustComesIn(sp.crust, z)); tries++) z = rng.below(SIZE_N); if (z != sp.size && crustComesIn(sp.crust, z)) sp.size = z; else sp.items.push_back({PINEAPPLE, WHOLE, NORMAL}); }
                 else if (kind == 1) sp.remove(tops[rng.below((int)tops.size())]);
                 else if (kind == 2) { int d = ONION + rng.below(ING_N - ONION); if (!sp.find(d)) sp.items.push_back({d, WHOLE, NORMAL}); else sp.sauce = (sp.sauce + 1) % SAUCE_N; }
                 else if (c->phone) service = service == DELIVERY ? CARRYOUT : DELIVERY;
@@ -336,7 +343,8 @@ bool Store::beginTalk(int id) {
     talk.cust = id;
     talk.draft = {Spec{}};
     talk.draftService = c->phone ? CARRYOUT : COUNTER;
-    talk.pending = orderScript(rng, c->who, c->want, c->service, c->phone, day);
+    UseSpeechMemory um(speech);
+    talk.pending = orderScript(rng, c->who, c->want, c->service, c->phone, day, ((int)(clockMin() / 60)) % 24);
     return true;
 }
 void Store::askRepeat() {
@@ -346,7 +354,10 @@ void Store::askRepeat() {
     talk.speaking = false; talk.pending.clear();
     talk.log.push_back({true, "Sorry, could you repeat that?"});
     c->patience -= 0.15f;
-    say(recap(rng, c->want, c->service, c->phone));
+    UseSpeechMemory um(speech);
+    c->asks++;
+    Ctx vc = voice(*c);
+    say(heat(rng, recap(rng, c->want, c->service, c->phone, &vc), 1 - c->patience));
     talk.pause = 0.4f;
 }
 void Store::askReadBack() {
@@ -357,7 +368,11 @@ void Store::askReadBack() {
     talk.log.push_back({true, "Let me read that back to you..."});
     c->patience -= 0.06f;
     bool ok;
-    say(readBack(rng, c->want, talk.draft, c->service, talk.draftService, c->phone, ok));
+    UseSpeechMemory um(speech);
+    Ctx vc = voice(*c);
+    std::string answer = readBack(rng, c->want, talk.draft, c->service, talk.draftService, c->phone, ok, &vc);
+    if (!ok) c->asks++;
+    say(ok ? answer : heat(rng, answer, 1 - c->patience + 0.25f));
     talk.pause = 1.2f;
 }
 bool Store::finishOrder() {
@@ -528,22 +543,22 @@ void Store::update(float dt) {
     if (!closed && t < SHIFT_LEN - 20 * SEC_PER_MIN && t >= nextArrival) {
         spawn();
         // orders an hour, by the time of day: dead mornings, a lunch rush, a lull, the big dinner rush, then a late tail
-        static const float PER_HOUR[24] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 1.5f, 3, 8, 10, 8, 4, 3, 5, 9, 12, 11, 7, 5, 4, 3};
+        static const float PER_HOUR[24] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 1.2f, 2, 4.5f, 5.5f, 4.5f, 2.5f, 2, 3, 5.5f, 7, 6.5f, 4.5f, 3, 2.5f, 2};
         float hr = clockMin() / 60, f = hr - std::floor(hr);
         int h0 = (int)hr % 24, h1 = (h0 + 1) % 24;
-        float perHour = (PER_HOUR[h0] * (1 - f) + PER_HOUR[h1] * f) * std::min(1.6f, (day <= 1 ? 0.75f : 1.f) + 0.07f * (day - 1));
+        float perHour = (PER_HOUR[h0] * (1 - f) + PER_HOUR[h1] * f) * std::min(1.5f, (day <= 1 ? 0.75f : 1.f) + 0.05f * (day - 1));
         float mean = 60.f * SEC_PER_MIN / std::max(0.8f, perHour);
         nextArrival = t + mean * rng.range(0.55f, 1.45f);
     }
     // ---- the conversation
     if (talk.active()) {
         Customer* c = cust(talk.cust);
-        float speed = c && c->who.mood == 0 ? 40.f : c && c->who.mood == 1 ? 26.f : 32.f;
+        float speed = c && c->who.mood == 0 ? 30.f : c && c->who.mood == 1 ? 19.f : 24.f;
         if (talk.speaking) {
             float before = talk.shown;
             talk.shown += speed * dt;
             if ((int)(talk.shown / 3) != (int)(before / 3)) events.push_back({E_TALK, 0, ""});
-            if (talk.shown >= (float)talk.log.back().text.size()) { talk.speaking = false; talk.pause = 0.65f; }
+            if (talk.shown >= (float)talk.log.back().text.size()) { talk.speaking = false; talk.pause = 1.1f; }
         } else if (!talk.pending.empty()) {
             talk.pause -= dt;
             if (talk.pause <= 0) {
@@ -559,15 +574,15 @@ void Store::update(float dt) {
         if (c.leaving > 0) { c.leaving += dt; continue; }
         switch (c.state) {
             case C_RINGING:
-                c.patience = 1 - c.timer / 20;
-                if (c.timer > 20 || closed) lose(c, NO_ANSWER);
+                c.patience = 1 - c.timer / 45;
+                if (c.timer > 45 || closed) lose(c, NO_ANSWER);
                 break;
             case C_INLINE:
-                c.patience -= dt / 60;
+                c.patience -= dt / 140;
                 if (c.patience <= 0) lose(c, RUDE_SERVICE);
                 break;
             case C_ORDERING:
-                c.patience -= dt / 130;
+                c.patience -= dt / 260;
                 if (c.patience <= 0) { talk = Talk{}; lose(c, RUDE_SERVICE); }
                 break;
             case C_COMING:
@@ -580,8 +595,8 @@ void Store::update(float dt) {
             if (Order* o = order(c.order)) c.patience = std::clamp(1 - o->minutes(t) / VERY_LATE_MIN, 0.f, 1.f);
             c.barkT -= dt; c.nextBark -= dt;
             if (c.nextBark <= 0) {
-                c.nextBark = rng.range(7, 16) * (0.5f + c.patience);
-                if (c.patience < 0.75f) { c.bark = waitingBark(rng, c.patience); c.barkT = 3.5f; }
+                c.nextBark = rng.range(12, 26) * (0.5f + c.patience);
+                if (c.patience < 0.75f) { UseSpeechMemory um(speech); Ctx vc = voice(c); c.bark = waitingBark(rng, c.patience, &vc); c.barkT = 5.5f; }
             }
         }
     }
