@@ -47,11 +47,11 @@ void readout(const Pizza& p, const Ticket* k) {
             Rectangle bar{box.x + 208, y + 3, 80, 12};
             DrawRectangleRec(bar, {220, 212, 196, 255});
             if (target > 0) {
-                float full = target * 1.6f;
-                DrawRectangleRec({bar.x + bar.width * 0.8f / 1.6f, bar.y, bar.width * 0.5f / 1.6f, bar.height}, {150, 210, 150, 255});
+                float full = target * 2.0f;
+                DrawRectangleRec({bar.x + bar.width * 0.8f / 2.0f, bar.y, bar.width * 0.8f / 2.0f, bar.height}, {150, 210, 150, 255});
                 float u = std::clamp(amount / full, 0.f, 1.f);
                 float r = amount / target;
-                DrawRectangleRec({bar.x + u * bar.width - 2, bar.y - 3, 4, bar.height + 6}, r < 0.8f || r > 1.3f ? ui::RED : ui::shade(ui::GREEN, 0.6f));
+                DrawRectangleRec({bar.x + u * bar.width - 2, bar.y - 3, 4, bar.height + 6}, r < 0.8f || r > 1.6f ? ui::RED : ui::shade(ui::GREEN, 0.6f));
             } else {
                 DrawRectangleRec(bar, {240, 170, 160, 255});
                 ui::text("not on ticket", bar.x + 2, bar.y - 1, 12, ui::DKRED);
@@ -85,12 +85,13 @@ void doughPicker() {
         if (!open.empty()) ui::text("Then grab the right dough for it.", box.x + box.width / 2, box.y + 276, 22, ui::GREY, 1);
         return;
     }
-    ui::text("GRAB A DOUGH", box.x + 24, box.y + 16, 30, INK);
+    ui::text(G.doughCrust == THIN ? "GRAB A CRUST" : "GRAB A DOUGH", box.x + 24, box.y + 16, 30, INK);
     ui::text("Size", box.x + 24, box.y + 66, 20, ui::GREY);
     for (int i = 0; i < 4; i++) {
         float cx = box.x + 100 + i * 155, cy = box.y + 190, r = 34 + i * 9.f;
         Rectangle hit{cx - 70, cy - 90, 140, 180};
-        bool sel = G.doughSize == i;
+        bool sel = G.doughSize == i, ok = G.doughCrust < 0 || crustComesIn(G.doughCrust, i);
+        if (!ok) { DrawRectangleRounded(hit, 0.15f, 6, {200, 194, 182, 255}); DrawRectangleRoundedLinesEx(hit, 0.15f, 6, 3, ui::GREY); ui::text(sizeName(i), cx, cy + 46, 20, ui::GREY, 1); ui::text("not made", cx, cy + 66, 17, ui::GREY, 1); continue; }
         DrawRectangleRounded(hit, 0.15f, 6, sel ? ui::YELLOW : ui::hover(hit) ? Color{244, 236, 216, 255} : Color{236, 226, 204, 255});
         DrawRectangleRoundedLinesEx(hit, 0.15f, 6, 3, INK);
         DrawCircleV({cx, cy - 14}, r + 3, INK);
@@ -101,9 +102,10 @@ void doughPicker() {
     }
     ui::text("Crust", box.x + 24, box.y + 300, 20, ui::GREY);
     for (int i = 0; i < 3; i++)
-        if (ui::button({box.x + 30 + i * 205, box.y + 332, 190, 56}, crustName(i), G.doughCrust == i ? ui::YELLOW : Color{236, 226, 204, 255}, true, 22)) { G.doughCrust = i; sfx(SFX_CLICK); }
+        if (ui::button({box.x + 30 + i * 205, box.y + 332, 190, 56}, crustName(i), G.doughCrust == i ? ui::YELLOW : Color{236, 226, 204, 255}, true, 22)) { G.doughCrust = i; if (G.doughSize >= 0 && !crustComesIn(i, G.doughSize)) G.doughSize = -1; sfx(SFX_CLICK); }
+    if (G.doughCrust == THIN) ui::text("Pre-made, stamped, from the box. No tossing.", box.x + box.width / 2, box.y + 398, 18, ui::DKRED, 1);
     bool ok = G.doughSize >= 0 && G.doughCrust >= 0;
-    if (ui::button({box.x + 180, box.y + 440, 300, 70}, "SLAP IT OUT", ui::RED, ok, 28) && ok) {
+    if (ui::button({box.x + 180, box.y + 440, 300, 70}, G.doughCrust == THIN ? "TAKE A CRUST" : "SLAP IT OUT", ui::RED, ok, 28) && ok) {
         if (S.startPizza(k->id, G.doughSize, G.doughCrust)) { sfx(SFX_PLOP); G.tool = -1; G.pickTicket = -1; }
     }
 }
@@ -192,7 +194,7 @@ void portionChart() {
     };
     note("Light / Extra", "Light is half a portion. Extra is one and a half.");
     note("Half and half", "A topping on one half gets half its portion, all of it on that half.");
-    note("Close enough", "Within about a fifth either way is fine. Spread it evenly, edge to edge.");
+    note("Close enough", "Too little is what customers notice (under about 80%). Too much is forgiven up to about 1.6 times, but spread it evenly, edge to edge.");
     note("Cutting", "Pie cut: Small is 6 slices (3 cuts), the rest are 8 (4 cuts), all through the middle. THIN crust is cut in squares.");
     note("Sizes", "10\" Small, 12\" Medium, 14\" Large, 16\" X-Large. Thin comes in M and L, Pan in M.");
     if (ui::button({box.x + box.width - 150, box.y + 16, 130, 44}, "Close", ui::YELLOW, true, 22) || IsKeyPressed(KEY_TAB)) G.chart = false;

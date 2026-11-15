@@ -1,5 +1,12 @@
 # Makeline: what's new
 
+## 0.1.3-alpha
+
+- **Over-topping is easy now.** Too little still gets noticed (under about 80% of a portion), but too much is
+  forgiven up to about 1.6 times. Only a pile-on gets a complaint.
+- **Thin crust is pre-made.** No tossing: you take a stamped, cracker-like crust from the box, and it bakes up
+  crisp with docking holes and a flat edge. Sizes a crust doesn't come in are greyed out.
+
 ## 0.1.2-alpha
 
 - **Slower clock.** The timing was too tight. A shop minute is now twelve real seconds, so an order is "late"

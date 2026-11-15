@@ -39,7 +39,7 @@ int main() {
         CHECK(has(scorePizza(s, q), MISSING, PEPPERONI));
         q = p; for (int i = 0; i < 20; i++) q.addBit(PINEAPPLE, rng.range(-0.5f, 0.5f), rng.range(-0.5f, 0.5f), rng);
         CHECK(has(scorePizza(s, q), UNWANTED, PINEAPPLE));
-        q = p; for (int i = 0; i < 40; i++) q.addBit(PEPPERONI, rng.range(-0.5f, 0.5f), rng.range(-0.5f, 0.5f), rng);
+        q = p; for (int i = 0; i < 50; i++) q.addBit(PEPPERONI, rng.range(-0.5f, 0.5f), rng.range(-0.5f, 0.5f), rng);
         CHECK(has(scorePizza(s, q), TOO_MUCH, PEPPERONI));
         q = p; q.bits.erase(std::remove_if(q.bits.begin(), q.bits.end(), [](const Bit& b) { return b.ing == MOZZ && b.x > 0; }), q.bits.end());
         CHECK(has(scorePizza(s, q), TOO_LITTLE, MOZZ));
@@ -49,7 +49,7 @@ int main() {
         CHECK(has(scorePizza(s, q), WRONG_CUT));
         q = p; q.sauceOz[MARINARA] = 0; q.sauceOz[BBQ] = 5;
         CHECK(has(scorePizza(s, q), WRONG_SAUCE));
-        q = p; q.sauceOz[MARINARA] *= 2;
+        q = p; q.sauceOz[MARINARA] *= 2.6f;
         CHECK(has(scorePizza(s, q), SAUCE_HIGH));
         q = p; q.stamps.resize(q.stamps.size() / 3);
         CHECK(has(scorePizza(s, q), SAUCE_PATCHY));

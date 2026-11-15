@@ -140,8 +140,8 @@ void judgeIng(Score& sc, const Spec& want, const Pizza& p, int ing) {
     }
     if (r < 0.6f) sc.add(TOO_LITTLE, 1.0f, ing);
     else if (r < 0.8f) sc.add(TOO_LITTLE, 0.5f, ing);
-    else if (r > 1.7f) sc.add(TOO_MUCH, 1.0f, ing);
-    else if (r > 1.3f) sc.add(TOO_MUCH, 0.5f, ing);
+    else if (r > 2.2f) sc.add(TOO_MUCH, 1.0f, ing);   // over-topping is easy and mostly forgiven: it costs the store, not the customer
+    else if (r > 1.6f) sc.add(TOO_MUCH, 0.5f, ing);
     // spread: each eighth of the pizza should get its share, and not all of it in the middle
     if (expL + expR >= 8) {
         float cnt[8] = {0}, sumR = 0, n = 0;
@@ -175,8 +175,8 @@ Score scoreOneWay(const Spec& want, const Pizza& p) {
         float r = total / target;
         if (r < 0.55f) sc.add(SAUCE_LOW, 1.0f);
         else if (r < 0.78f) sc.add(SAUCE_LOW, 0.5f);
-        else if (r > 1.8f) sc.add(SAUCE_HIGH, 1.0f);
-        else if (r > 1.32f) sc.add(SAUCE_HIGH, 0.5f);
+        else if (r > 2.4f) sc.add(SAUCE_HIGH, 1.0f);
+        else if (r > 1.7f) sc.add(SAUCE_HIGH, 0.5f);
         if (p.sauceCoverage() < 0.72f) sc.add(SAUCE_PATCHY, 0.5f);
     }
     for (int ing = SAUCE_N; ing < ING_N; ing++) judgeIng(sc, want, p, ing);

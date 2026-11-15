@@ -74,8 +74,9 @@ You walk around behind the counter. Each station is a place in the store:
 - **Cheeses:** shredded mozzarella, mozzarella balls, provolone, cheddar, parmesan, feta.
 - **Vegetables:** onions, green peppers, pineapple, tomatoes, mushrooms, black olives.
 - **Meats:** Italian sausage, pepperoni, Canadian bacon, bacon, beef, chicken.
-- **Portions:** a chart per size. Light is half, extra is one and a half, a topping on one half gets half.
-  About a fifth either way is acceptable. It has to be spread evenly.
+- **Thin crust** is pre-made: stamped, boxed, cracker-like. You take one from the box instead of tossing dough.
+- **Portions:** a chart per size. The amounts so far are estimates, not a real spec sheet: the owner's real numbers should replace them (the table is `src/core/menu.cpp`). Light is half, extra is one and a half, a topping on one half gets half.
+  Too little (under about 80%) is what customers notice. Over-topping is easy and mostly forgiven (up to about 1.6 times); only a pile-on gets a complaint. It has to be spread evenly.
 - Portion guides are shown on day 1 (training). After that you're expected to know the chart.
 
 ### Oven, cutting, boxing

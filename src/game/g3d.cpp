@@ -233,7 +233,7 @@ void pizza(const Pizza& p, const Frame& f, float lx, float lz, float bakeShow) {
     Vector3 o = f.at(lx, 0, lz);
     rlTranslatef(o.x, o.y, o.z);
     rlRotatef(f.yaw, 0, 1, 0);
-    Color crust = ui::mix({238, 220, 178, 255}, p.crust == PAN ? Color{190, 128, 66, 255} : Color{208, 150, 84, 255}, b);
+    Color crust = p.crust == THIN ? ui::mix({238, 222, 182, 255}, {216, 172, 104, 255}, b) : ui::mix({238, 220, 178, 255}, p.crust == PAN ? Color{190, 128, 66, 255} : Color{208, 150, 84, 255}, b);
     if (p.crust == PAN) {   // in its pan
         cyl({0, 0, 0}, R + 0.012f, h + 0.004f, {58, 58, 64, 255}, 28);
         ring({0, h + 0.0045f, 0}, R, R + 0.012f, {80, 80, 88, 255}, 0, 360, 28);
@@ -242,6 +242,10 @@ void pizza(const Pizza& p, const Frame& f, float lx, float lz, float bakeShow) {
     float top = h + 0.0005f;
     disc({0, h + 0.0045f, 0}, R * (1 - rim), ui::mix({246, 232, 198, 255}, {234, 200, 136, 255}, b), 28);
     top = h + 0.005f;
+    if (p.crust == THIN) {   // a stamped cracker: rows of docking holes, a flat edge, no puff
+        for (float gx = -R * 0.95f; gx < R * 0.95f; gx += 0.036f) for (float gz = -R * 0.95f; gz < R * 0.95f; gz += 0.036f)
+            if (gx * gx + gz * gz < R * R * 0.86f) g3::disc({gx, top + 0.0001f, gz}, 0.0017f, {150, 108, 62, 255}, 5);
+    }
     // sauce: flat dabs
     for (size_t i = 0; i < p.stamps.size(); i++) {
         auto& st = p.stamps[i];
