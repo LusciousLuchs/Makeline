@@ -1,5 +1,14 @@
 # Makeline: what's new
 
+## 0.2.0-alpha
+
+- **Real shifts.** The store is open 9 AM to midnight, and your boss gives you a random 8-hour shift each day. You
+  open if it starts at 9 and close if it ends at midnight. Tomorrow's shift is on the end-of-day screen.
+- **Time of day matters.** Quiet mornings, a lunch rush, an afternoon lull, a big dinner rush, a late tail. The
+  sky goes dark in the evening.
+- **Empty shop, fast time.** When nobody is in and nothing is on the line, the game skips ahead until the next
+  customer.
+
 ## 0.1.3-alpha
 
 - **Over-topping is easy now.** Too little still gets noticed (under about 80% of a portion), but too much is

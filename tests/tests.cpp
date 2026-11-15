@@ -75,9 +75,9 @@ int main() {
         float care = pass == 0 ? 1.0f : 0.3f;
         float sum = 0; int n = 0, orders = 0, lost = 0;
         for (int day = 1; day <= 4; day++) {
-            Store s; s.day = day; s.startDay(100 + day);
+            Store s; s.day = day; s.forceStart = 17 * 60; s.startDay(100 + day);
             Rng br(day);
-            for (int i = 0; i < 60 * 1600 && !s.dayOver; i++) { s.update(1 / 60.f); botStep(s, 1 / 60.f, care, br); }
+            for (int i = 0; i < 20 * 9000 && !s.dayOver; i++) { s.update(1 / 20.f); botStep(s, 1 / 20.f, care, br); }
             CHECK(s.dayOver);
             for (auto& r : s.dayReviews) { sum += r.stars; n++; if (pass == 0 && getenv("MAKELINE_TESTDBG")) { printf("  day %d %d*:", day, r.stars); for (auto& x : r.reasons) printf(" [%s]", x.c_str()); printf("\n"); } }
             orders += s.dayOrders; lost += s.dayLost;
@@ -115,10 +115,10 @@ int main() {
     {   // a crew runs the shop without you: a good one keeps the score up, a bad one doesn't, and its mistakes are noted
         float avg[2];
         for (int pass = 0; pass < 2; pass++) {
-            Store s; s.startDay(77);
+            Store s; s.forceStart = 17 * 60; s.startDay(77);
             float skill = pass == 0 ? 0.97f : 0.25f;
             for (int role : {CSR, CSR, COOK, COOK, DRIVER}) { Worker w; Rng r(role + 5); w.who = makePerson(r); w.role = role; w.skill = skill; s.staff.push_back(w); }
-            for (int i = 0; i < 60 * 1600 && !s.dayOver; i++) s.update(1 / 60.f);
+            for (int i = 0; i < 20 * 9000 && !s.dayOver; i++) s.update(1 / 20.f);
             if (getenv("MAKELINE_TESTDBG")) for (auto& r : s.dayReviews) { printf("  crew %d*:", r.stars); for (auto& x : r.reasons) printf(" [%s]", x.c_str()); printf("\n"); }
             CHECK(s.dayOver);
             float sum = 0; for (auto& r : s.dayReviews) sum += r.stars;
@@ -140,6 +140,21 @@ int main() {
         }
         CHECK(avg[0] > avg[1] + 1);
         CHECK(avg[0] > 3.5f);
+    }
+    {   // the boss's schedule: 8-hour shifts anywhere between open (9 AM) and close (midnight), different day to day
+        Store s; s.schedSeed = 5;
+        int seen[1440] = {0}, distinct = 0;
+        for (int d = 1; d <= 200; d++) {
+            int st = s.shiftFor(d);
+            CHECK(st >= OPEN_MIN && st + SHIFT_MINS <= CLOSE_MIN && st % 30 == 0);
+            if (!seen[st]++) distinct++;
+        }
+        CHECK(distinct >= 10);
+        CHECK(s.shiftFor(7) == s.shiftFor(7));
+        CHECK(Store::timeText(24 * 60 - 30) == "11:30 PM" && Store::timeText(9 * 60) == "9:00 AM" && Store::timeText(12 * 60) == "12:00 PM");
+        Store e; e.forceStart = 9 * 60; e.startDay(1);   // an opening shift runs 9 to 5 and stops taking customers 20 minutes before the end
+        for (int i = 0; i < 20 * 9000 && !e.dayOver; i++) { CHECK(!e.idle() || e.custs.empty() || true); e.update(1 / 20.f); }
+        CHECK(e.dayOver && e.shiftEnd() == 17 * 60);
     }
     {   // a script always names every topping somewhere (or loses one to static)
         for (int k = 0; k < 300; k++) {

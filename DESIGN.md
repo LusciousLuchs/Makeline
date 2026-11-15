@@ -35,9 +35,16 @@ It's built from five years on a real makeline: the point is that it feels right 
 
 ### A shift
 
-One day is the dinner rush, 5:00 to 6:00 PM, about 12 minutes of play. After
-closing you finish what's still in the store, then get the day's report: orders, walk-outs, sales, tips, every
-review with what went wrong, and corporate's verdict.
+- The store is **open 9 AM to midnight**. Your boss schedules you a **random 8-hour shift** somewhere in those
+  hours, in half-hour steps (9 AM to 5 PM, 4 PM to midnight, and everything in between). You see tomorrow's shift on
+  the end-of-day screen.
+- If your shift starts at 9 you're **opening**; if it ends at midnight you're **closing**.
+- The shop clock runs 12 real seconds to a minute, so an 8-hour shift is a long session. When the shop is completely
+  empty (no customers, no orders, nothing in the oven) the game **skips ahead on its own** until someone walks in.
+- Customers come in by the time of day: dead mornings, a **lunch rush** (11 to 1), an afternoon lull, the big
+  **dinner rush** (5 to 8) and a late tail.
+- The last 20 minutes of your shift take no new customers; you finish what's on the line, then the next manager
+  takes over. After the day you get a report: orders, walk-outs, sales, tips, every review, and corporate's verdict.
 
 Days get busier and orders get harder: day 1 is one-topping pizzas with portion guides on; later days bring
 half-and-half, light and extra, several pizzas an order, customers who change their mind, and bad phone lines.
@@ -102,7 +109,7 @@ customer's head. The store runs on the same times a real one does:
 | Over 30 minutes | Very late |
 | Over 45 minutes | Extreme: one star, whatever the pizza was like |
 
-A shift is the dinner rush, 5:00 to 6:00 on the shop clock (one clock minute is twelve seconds of play).
+The shop clock runs one minute every twelve seconds of play.
 
 ## Staff
 
@@ -190,7 +197,8 @@ Every finished or failed order is judged against what the customer **actually** 
 1. The reprimand threshold: 3.0 stars?
    And the count: built as "3 reprimands within 7 days". If you meant three days in a row only, say so.
 2. Fired means the save starts over at a new store. Or should it be a hard game over?
-3. The name. "Makeline" is a placeholder.
+3. Length: an 8-hour shift at this clock speed is about 90 minutes of real time before skipping the empty stretches. Is that right, or should a day be shorter?
+3b. The name. "Makeline" is a placeholder.
 4. HR reprimands: written here as counting toward the same three-in-seven-days that gets you fired. Or should
    they be a separate count?
 5. Should a complaint always mean a reprimand, or should upper management sometimes side with you when the

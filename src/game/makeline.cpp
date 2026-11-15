@@ -103,7 +103,6 @@ void doughPicker() {
     ui::text("Crust", box.x + 24, box.y + 300, 20, ui::GREY);
     for (int i = 0; i < 3; i++)
         if (ui::button({box.x + 30 + i * 205, box.y + 332, 190, 56}, crustName(i), G.doughCrust == i ? ui::YELLOW : Color{236, 226, 204, 255}, true, 22)) { G.doughCrust = i; if (G.doughSize >= 0 && !crustComesIn(i, G.doughSize)) G.doughSize = -1; sfx(SFX_CLICK); }
-    if (G.doughCrust == THIN) ui::text("Pre-made, stamped, from the box. No tossing.", box.x + box.width / 2, box.y + 398, 18, ui::DKRED, 1);
     bool ok = G.doughSize >= 0 && G.doughCrust >= 0;
     if (ui::button({box.x + 180, box.y + 440, 300, 70}, G.doughCrust == THIN ? "TAKE A CRUST" : "SLAP IT OUT", ui::RED, ok, 28) && ok) {
         if (S.startPizza(k->id, G.doughSize, G.doughCrust)) { sfx(SFX_PLOP); G.tool = -1; G.pickTicket = -1; }

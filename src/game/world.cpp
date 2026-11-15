@@ -225,7 +225,7 @@ void room() {
     }
     rlEnd();
     // the front: windows onto the street and the door
-    float dusk = std::clamp((float)(S.t / SHIFT_LEN), 0.f, 1.f);
+    float dusk = std::clamp((S.clockMin() - 17.5f * 60) / (3 * 60), 0.f, 1.f);   // sunset around 7 PM, dark by 8:30
     Color sky = ui::mix({150, 204, 240, 255}, {60, 50, 100, 255}, dusk), low = ui::mix({250, 220, 160, 255}, {236, 120, 80, 255}, dusk);
     for (int i = 0; i < 2; i++) {
         float x = -3.2f + i * 3.0f;

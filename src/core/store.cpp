@@ -38,6 +38,28 @@ void Store::startDay(uint64_t seed) {
     events.clear(); dayReviews.clear();
     dayMoney = dayTips = 0; dayOrders = dayLost = 0;
     nextCust = nextOrder = nextTicket = 1;
+    shiftStart = forceStart >= 0 ? forceStart : shiftFor(day);
+    nextArrival = rng.range(6, 25);
+    if (shiftStart <= OPEN_MIN) events.push_back({E_NOTE, 0, "You're opening today. The doors unlock at 9."});
+    else if (shiftEnd() >= CLOSE_MIN) events.push_back({E_NOTE, 0, "You're closing tonight."});
+}
+int Store::shiftFor(int d) const {
+    Rng r(schedSeed * 2654435761ull + (uint64_t)d * 40503ull);
+    return OPEN_MIN + 30 * r.below((CLOSE_MIN - SHIFT_MINS - OPEN_MIN) / 30 + 1);
+}
+std::string Store::timeText(int m) {
+    m %= 1440;
+    int h = m / 60, mm = m % 60;
+    char b[24];
+    snprintf(b, sizeof b, "%d:%02d %s", h % 12 == 0 ? 12 : h % 12, mm, h >= 12 ? "PM" : "AM");
+    return b;
+}
+bool Store::idle() const {
+    if (dayOver || closed || talk.active()) return false;
+    for (auto& c : custs) if (c.state != C_DONE) return false;
+    for (auto& o : orders) if (!o.done) return false;
+    for (auto& k : tickets) if (k.state != T_BOXED && k.state != T_VOID) return false;
+    return oven.empty() && exitQ.empty() && bench < 0 && cutBoard < 0;
 }
 
 float Store::rating() const {
@@ -273,11 +295,7 @@ int Store::closeDay() {
     return 1;
 }
 std::string Store::clock() const {
-    int mins = 17 * 60 + (int)(std::min(t, (double)SHIFT_LEN + 240) / SEC_PER_MIN);
-    int h = mins / 60, m = mins % 60;
-    char b[24];
-    snprintf(b, sizeof b, "%d:%02d %s", h > 12 ? h - 12 : h, m, h >= 12 ? "PM" : "AM");
-    return b;
+    return timeText((int)clockMin());
 }
 
 int Store::ringing() const { for (auto& c : custs) if (c.state == C_RINGING) return c.id; return -1; }
@@ -507,11 +525,15 @@ void Store::update(float dt) {
     t += dt;
     if (t >= SHIFT_LEN) closed = true;
     // ---- people arriving: slow at open, a dinner rush in the middle
-    if (!closed && t < SHIFT_LEN - 25 && t >= nextArrival) {
+    if (!closed && t < SHIFT_LEN - 20 * SEC_PER_MIN && t >= nextArrival) {
         spawn();
-        float mean = std::max(30.f, 58.f - 5.f * (day - 1));
-        float u = (float)(t / SHIFT_LEN), rush = 1.0f - 0.4f * std::exp(-(u - 0.55f) * (u - 0.55f) / 0.04f);
-        nextArrival = t + mean * rush * rng.range(0.55f, 1.45f);
+        // orders an hour, by the time of day: dead mornings, a lunch rush, a lull, the big dinner rush, then a late tail
+        static const float PER_HOUR[24] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 1.5f, 3, 8, 10, 8, 4, 3, 5, 9, 12, 11, 7, 5, 4, 3};
+        float hr = clockMin() / 60, f = hr - std::floor(hr);
+        int h0 = (int)hr % 24, h1 = (h0 + 1) % 24;
+        float perHour = (PER_HOUR[h0] * (1 - f) + PER_HOUR[h1] * f) * std::min(1.6f, (day <= 1 ? 0.75f : 1.f) + 0.07f * (day - 1));
+        float mean = 60.f * SEC_PER_MIN / std::max(0.8f, perHour);
+        nextArrival = t + mean * rng.range(0.55f, 1.45f);
     }
     // ---- the conversation
     if (talk.active()) {
@@ -597,7 +619,7 @@ void Store::update(float dt) {
     if (closed) {
         bool busy = talk.active();
         for (auto& c : custs) if (c.state != C_DONE) busy = true;
-        if (!busy || t > SHIFT_LEN + 240) {
+        if (!busy || t > SHIFT_LEN + 30 * SEC_PER_MIN) {
             for (auto& o : orders) if (!o.done) resolve(o, {{NEVER_SERVED, -1, 4}});
             for (auto& c : custs) if (c.state != C_DONE) { c.state = C_DONE; }
             talk = Talk{};

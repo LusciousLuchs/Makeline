@@ -11,7 +11,9 @@ namespace pz {
 constexpr float OVEN_TIME = 30;
 constexpr float REPRIMAND_BELOW = 3.0f;
 constexpr float SEC_PER_MIN = 12;        // one minute on the shop clock, in real seconds (20 minutes late = 4 real minutes)
-constexpr float SHIFT_LEN = 60 * SEC_PER_MIN;   // the dinner rush: 5:00 to 6:00, 12 minutes of play
+constexpr int OPEN_MIN = 9 * 60, CLOSE_MIN = 24 * 60;   // the store: 9 AM to midnight
+constexpr int SHIFT_MINS = 8 * 60;                        // every shift the boss gives you is 8 hours
+constexpr float SHIFT_LEN = SHIFT_MINS * SEC_PER_MIN;
 
 enum CustState { C_RINGING, C_INLINE, C_ORDERING, C_COMING, C_WAITING, C_AWAY, C_DONE };
 struct Customer {
@@ -105,6 +107,9 @@ struct Store {
     // ---- this shift
     double t = 0;
     bool closed = false, dayOver = false;
+    int shiftStart = 17 * 60;       // today's shift, in minutes after midnight (the end is 8 hours on)
+    int forceStart = -1;            // (tests, screenshots) a shift start to use instead of the boss's schedule
+    uint64_t schedSeed = 1; bool schedSet = false;
     Rng rng{1};
     std::vector<Customer> custs;
     std::vector<Order> orders;
@@ -125,6 +130,12 @@ struct Store {
 
     void startDay(uint64_t seed);
     void update(float dt);
+    // the boss's schedule: a random 8-hour shift somewhere between open and close, in half-hour steps
+    int shiftFor(int day) const;
+    int shiftEnd() const { return shiftStart + SHIFT_MINS; }
+    float clockMin() const { return shiftStart + (float)(std::min(t, (double)SHIFT_LEN + 600) / SEC_PER_MIN); }
+    bool idle() const;              // nobody here, nothing on the line: the game skips ahead
+    static std::string timeText(int minutesAfterMidnight);   // "7:30 PM"
     float rating() const;           // the last 30 reviews; 0 when there are none yet
     // closing the books on today: 0 nothing, 1 a reprimand (the score closed under REPRIMAND_BELOW), 2 fired
     // (three reprimands inside a week). Call once when the day is over.

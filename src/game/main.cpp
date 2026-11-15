@@ -24,6 +24,7 @@ bool confirmNew = false, wantQuit = false;
 bool& shotMode = gShotMode;
 int verdict = 0;   // corporate, at closing: 0 fine, 1 a reprimand, 2 fired
 uint64_t seed = 1;
+int shiftArg = -1;   // (screenshots) --shift hours after midnight
 Texture2D logo{};
 Pizza titlePizza;
 
@@ -36,6 +37,8 @@ void load() {
     if (G.S.fired) G.S = Store{};
 }
 void startShift() {
+    if (!G.S.schedSet) { G.S.schedSeed = seed; G.S.schedSet = true; }
+    if (shiftArg >= 0) G.S.forceStart = shiftArg;
     G.S.startDay(seed);
     G.tool = -1; G.pickTicket = -1; G.toasts.clear(); G.paused = G.chart = G.help = false;
     screen = PLAY;
@@ -74,7 +77,7 @@ void topBar() {
     char b[64];
     snprintf(b, sizeof b, "Day %d", S.day);
     ui::text(b, 240, 18, 26, ui::CREAM);
-    ui::text(S.closed ? "CLOSED - finish up" : S.clock(), 340, 18, 26, S.closed ? ui::RED : ui::YELLOW);
+    ui::text(S.closed ? (S.shiftEnd() >= CLOSE_MIN ? "CLOSING - finish up" : "SHIFT OVER - finish up") : S.clock() + "   (until " + Store::timeText(S.shiftEnd()) + ")", 340, 18, 26, S.closed ? ui::RED : ui::YELLOW);
     float rt = S.rating();
     ui::stars(1150, 18, 28, rt, {110, 92, 82, 255});
     if (rt > 0) snprintf(b, sizeof b, "%.1f", rt); else snprintf(b, sizeof b, "new");
@@ -147,6 +150,11 @@ void titleScreen() {
         ui::text(b, card.x + 240, card.y + 184, 24, INK);
     } else ui::text("No reviews yet. That won't last.", card.x + 46, card.y + 184, 22, ui::GREY);
     snprintf(b, sizeof b, S.day > 1 || !S.reviews.empty() ? "CLOCK IN: DAY %d" : "CLOCK IN", S.day);
+    if (!S.schedSet) { S.schedSeed = seed; S.schedSet = true; }
+    {   // the boss's schedule
+        int st = S.shiftFor(S.day);
+        ui::text("Your shift: " + Store::timeText(st) + " to " + Store::timeText(st + SHIFT_MINS), card.x + 46, card.y + 212, 24, ui::DKRED);
+    }
     float y = card.y + 250;
     if (!confirmNew) {
         if (ui::button({card.x + 46, y, 528, 84}, b, ui::RED, true, 36)) { sfx(SFX_DING); startShift(); }
@@ -220,6 +228,10 @@ void dayEnd() {
         y += ui::wrap(note, card.x + 40, y, card.width - 80, 22, ui::DKRED) + 10;
         if (S.day == 1 && S.guides) ui::wrap("From tomorrow the portion guides come off. Learn the chart. (You can turn them back on from the pause menu.)", card.x + 40, y, card.width - 80, 19, {90, 74, 64, 255});
     }
+    if (verdict != 2) {
+        int st = S.shiftFor(S.day + 1);
+        ui::text("The boss has you in tomorrow: " + Store::timeText(st) + " to " + Store::timeText(st + SHIFT_MINS), card.x + 40, card.y + card.height - 134, 19, ui::DKRED);
+    }
     if (verdict == 2) {
         if (ui::button({card.x + 40, card.y + card.height - 100, 480, 70}, "START OVER AT A NEW STORE", ui::RED, true, 26)) { G.S = Store{}; save(); verdict = 0; screen = TITLE; }
     } else {
@@ -290,7 +302,11 @@ void play(float dt) {
     if (!G.paused) {
         if (IsKeyPressed(KEY_TAB) && G.mode == M_MAKE) G.chart = !G.chart;
         if (IsKeyPressed(KEY_M)) { G.office = !G.office; if (G.office) { if (!shotMode) EnableCursor(); } else setMode(G.mode); }
-        S.update(dt);
+        // a dead shop skips ahead on its own, so a quiet morning isn't twenty minutes of staring at an empty counter
+        bool skipping = S.idle();
+        float step = skipping ? dt * 14 : dt;
+        for (float left = step; left > 0; left -= 0.2f) S.update(std::min(left, 0.2f));
+        G.skipping = skipping;
         events();
         for (auto& t : G.toasts) t.age += dt;
         G.toasts.erase(std::remove_if(G.toasts.begin(), G.toasts.end(), [](const Toast& t) { return t.age > 7; }), G.toasts.end());
@@ -307,6 +323,7 @@ void play(float dt) {
     worldHud();
     if (G.mode == M_REGISTER) registerOverlay(); else if (G.mode == M_MAKE) makeOverlay(); else if (G.mode == M_CUT) cutOverlay();
     topBar();
+    if (G.skipping && !G.paused) { ui::panel({600, 86, 400, 44}, ui::CREAM, 12, 3, true); ui::text("Quiet... skipping ahead", 800, 94, 24, INK, 1); }
     drawToasts();
     ui::M = keepM; ui::pressed = kp; ui::down = kd;
     if (G.chart && !G.paused) portionChart();
@@ -331,6 +348,7 @@ int main(int argc, char** argv) {
         else if (arg("--seed")) seed = (uint64_t)atoll(argv[++i]);
         else if (arg("--screen")) show = argv[++i];
         else if (arg("--at")) at = argv[++i];
+        else if (arg("--shift")) shiftArg = (int)(atof(argv[++i]) * 60);
         else if (arg("--hire")) hireN = atoi(argv[++i]);
         else if (arg("--script")) ui::script(argv[++i]);
         else if (!strcmp(argv[i], "--demo")) demo = true;

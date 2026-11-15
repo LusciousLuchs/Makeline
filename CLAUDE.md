@@ -42,7 +42,9 @@ up to date when the owner adds to it. "Makeline" is a working title.
 - The UI is drawn on a 1600x900 canvas scaled onto the window (`ui::scale/offset`); 3D fills the window behind it.
 - Stations have a `g3::Frame` (local x = screen right, local z = toward the player); the mouse is put onto the
   table with `mouseOnPlane` and `Frame::local`. Pizza units: (0,0) the middle, 1 the crust's edge.
-- Time: `SEC_PER_MIN` (12 real seconds a clock minute), `SHIFT_LEN` 60 clock minutes.
+- Time: `SEC_PER_MIN` (12 real seconds a clock minute). The store is open 9 AM to midnight; each day the boss gives
+  an 8-hour shift (`Store::shiftFor`, half-hour steps; `shiftStart`, `forceStart` for tests; `--shift hours` in
+  screenshots). Arrivals follow a per-hour table in `Store::update`. `Store::idle()` lets the game skip ahead x14.
 - Shipping: bump the version in CMakeLists.txt and push to `main`; `.github/workflows/release.yml` builds the
   Windows zip and publishes a release. The game's updater (`src/game/updater.hpp`, `update::REPO`) reads the
   newest release of that repository. Keep CHANGELOG.md's newest section short and in game terms (it becomes the

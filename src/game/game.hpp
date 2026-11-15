@@ -37,6 +37,7 @@ struct Game {
     Vector2 cutFrom{0, 0};
     std::vector<Toast> toasts;
     bool paused = false, help = false;
+    bool skipping = false;               // the shop is empty: time runs fast
     bool office = false; int officeTab = 0;   // the manager's office (staff, hiring, the delivery map)
     bool playing = false;                     // a shift is on (not the end-of-day report)
 };
