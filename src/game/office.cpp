@@ -12,21 +12,11 @@ const char* moodWord(float m) { return m > 0.75f ? "Happy" : m > 0.5f ? "Fine" :
 Color moodColor(float m) { return m > 0.5f ? ui::shade(ui::GREEN, 0.7f) : m > 0.3f ? Color{190, 130, 30, 255} : ui::DKRED; }
 const char* seems(float skill) { return skill > 0.8f ? "Sharp. Knows the job." : skill > 0.62f ? "Solid enough." : skill > 0.45f ? "Green, but willing." : "Showed up late to the interview."; }
 
-void face(const Person& p, float x, float y, float r) {   // a little portrait
-    static const Color SKIN[] = {{252, 226, 200, 255}, {242, 204, 170, 255}, {222, 174, 132, 255}, {188, 134, 96, 255}, {146, 100, 72, 255}, {100, 68, 50, 255}};
-    static const Color HAIR[] = {{84, 56, 38, 255}, {30, 26, 28, 255}, {206, 168, 96, 255}, {160, 76, 42, 255}, {150, 150, 152, 255}, {232, 232, 228, 255}};
-    Color hair = HAIR[std::clamp(p.hair, 0, 5)];
-    if (p.hairStyle == 3) DrawRectangleRounded({x - r - 3, y - r * 0.3f, 2 * r + 6, r * 1.9f}, 0.5f, 6, hair);
-    DrawCircleV({x, y}, r + 2.5f, INK);
-    DrawCircleV({x, y}, r, SKIN[std::clamp(p.skin, 0, 5)]);
-    if (p.hairStyle >= 1 && p.hairStyle <= 3) DrawCircleSector({x, y - 1}, r + 1.5f, 180, 360, 14, hair);
-    if (p.hairStyle == 2) DrawCircleV({x, y - r - 3}, r * 0.34f, hair);
-    if (p.hairStyle == 0) DrawRing({x, y}, r - 2, r + 1.5f, 200, 340, 10, hair);
-    if (p.hairStyle == 4) { DrawCircleSector({x, y - 2}, r + 2.5f, 180, 360, 14, ui::RED); DrawRectangleRounded({x - r - 3, y - 5, r * 1.5f, 6}, 0.8f, 4, ui::DKRED); }
-    DrawCircleV({x - r * 0.36f, y + 1}, r * 0.1f, INK);
-    DrawCircleV({x + r * 0.36f, y + 1}, r * 0.1f, INK);
-    DrawLineEx({x - r * 0.22f, y + r * 0.5f}, {x + r * 0.22f, y + r * 0.5f}, 2, INK);
-    if (p.age > 55) { DrawLineEx({x - r * 0.6f, y - r * 0.25f}, {x - r * 0.2f, y - r * 0.25f}, 1.5f, {120, 90, 70, 255}); DrawLineEx({x + r * 0.2f, y - r * 0.25f}, {x + r * 0.6f, y - r * 0.25f}, 1.5f, {120, 90, 70, 255}); }
+void face(const Person& p, float x, float y, float r, bool uniform) {   // their picture
+    Texture2D t;
+    DrawRectangleRounded({x - r - 3, y - r - 3, 2 * r + 6, 2 * r + 6}, 0.2f, 6, INK);
+    if (g3::portrait(p, uniform, t)) DrawTexturePro(t, {0, 0, (float)t.width, -(float)t.height}, {x - r, y - r, 2 * r, 2 * r}, {0, 0}, 0, WHITE);
+    else DrawRectangleRec({x - r, y - r, 2 * r, 2 * r}, ui::GREY);
 }
 
 void staffTab(Rectangle box) {
@@ -38,10 +28,10 @@ void staffTab(Rectangle box) {
         Worker& w = S.staff[i];
         Rectangle row{box.x + 20, y, box.width - 40, 78};
         DrawRectangleRounded(row, 0.2f, 6, i & 1 ? Color{240, 232, 214, 255} : ui::PAPER);
-        face(w.who, row.x + 42, row.y + 42, 26);
-        ui::text(w.who.name, row.x + 84, row.y + 8, 24, INK);
+        face(w.who, row.x + 42, row.y + 39, 34, true);
+        ui::text(w.who.name, row.x + 90, row.y + 8, 24, INK);
         snprintf(b, sizeof b, "%d, %s", w.who.age, roleName(w.role));
-        ui::text(b, row.x + 84, row.y + 40, 19, ui::GREY);
+        ui::text(b, row.x + 90, row.y + 40, 19, ui::GREY);
         ui::text(moodWord(w.mood), row.x + 330, row.y + 8, 22, moodColor(w.mood));
         snprintf(b, sizeof b, "$%.0f a day%s", w.wage, w.writeUps ? (std::string("   ") + std::to_string(w.writeUps) + (w.writeUps == 1 ? " write-up" : " write-ups")).c_str() : "");
         ui::text(b, row.x + 330, row.y + 40, 19, ui::GREY);
@@ -71,10 +61,10 @@ void hireTab(Rectangle box) {
         Worker& w = S.applicants[i];
         Rectangle row{box.x + 20, y, box.width - 40, 78};
         DrawRectangleRounded(row, 0.2f, 6, i & 1 ? Color{240, 232, 214, 255} : ui::PAPER);
-        face(w.who, row.x + 42, row.y + 42, 26);
-        ui::text(w.who.name, row.x + 84, row.y + 8, 24, INK);
+        face(w.who, row.x + 42, row.y + 39, 34, false);
+        ui::text(w.who.name, row.x + 90, row.y + 8, 24, INK);
         snprintf(b, sizeof b, "%d years old", w.who.age);
-        ui::text(b, row.x + 84, row.y + 40, 19, ui::GREY);
+        ui::text(b, row.x + 90, row.y + 40, 19, ui::GREY);
         ui::text(std::string("Wants: ") + roleName(w.role), row.x + 330, row.y + 8, 22, INK);
         ui::text(seems(w.skill), row.x + 330, row.y + 40, 19, ui::GREY);
         snprintf(b, sizeof b, "$%.0f a day", w.wage);

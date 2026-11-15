@@ -1,5 +1,14 @@
 # Makeline: what's new
 
+## 0.1.1-alpha
+
+- **New people.** Customers and staff are now properly proportioned, with faces of their own: head and jaw shape,
+  eyes and eye colour, brows, nose, lips, ears, hair styles, beards, glasses, builds, heights and clothes. Their
+  faces tighten and their arms fold as they lose patience. Staff wear the uniform and visor.
+- Staff and applicants have real portraits in the manager's office.
+- Better lighting, soft shadows under furniture and people, and more in the lobby (drinks fridge, table, tiled
+  kitchen walls).
+
 ## 0.1.0-alpha
 
 The first build.

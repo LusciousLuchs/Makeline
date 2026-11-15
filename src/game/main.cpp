@@ -400,6 +400,10 @@ int main(int argc, char** argv) {
         float dt = shotMode ? 1 / 60.f : std::min(GetFrameTime(), 0.05f);
         if (IsKeyPressed(KEY_F11)) ToggleBorderlessWindowed();
         ui::beginFrame();
+        if (G.office) {   // pictures of the crew and the applicants, made before anything else is drawn
+            for (auto& w : G.S.staff) g3::portraitPrepare(w.who, true);
+            for (auto& w : G.S.applicants) g3::portraitPrepare(w.who, false);
+        }
         BeginDrawing();
         ClearBackground({16, 16, 18, 255});
         BeginMode2D(Camera2D{ui::offset, {0, 0}, 0, ui::scale});

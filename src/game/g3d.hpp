@@ -30,5 +30,9 @@ void topping(int ing, int var, float inch, float baked);   // one bit at the ori
 void binFill(int ing, const Frame& f, float lx, float lz, float size);   // a makeline pan and what's in it
 void person(const pz::Person& who, Vector3 feet, float yawDeg, float anger, float walk);
 void pizzaBox(Vector3 base, float yawDeg, bool open = false);
+void softShadow(Vector3 centre, float w, float d, float soft, unsigned char alpha);   // dark under and around something, fading out
+// a head-and-shoulders picture of someone for the screens: prepare it outside any drawing mode, then ask for it
+void portraitPrepare(const pz::Person& who, bool uniform);
+bool portrait(const pz::Person& who, bool uniform, Texture2D& out);
 
 }  // namespace g3

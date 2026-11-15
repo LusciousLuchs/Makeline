@@ -49,3 +49,7 @@ up to date when the owner adds to it. "Makeline" is a working title.
   release notes).
 - The embedded logo and font: `tools/embed_assets.py` -> `src/game/assets.inc`.
 - Sounds are synthesised placeholders (`src/game/audio.cpp`).
+- People (`src/game/people3d.cpp`): lofted bodies and heads built each frame from `looksOf(person)` (all face and
+  body numbers come from the person's age, sex, skin, hair and `look` seed). The owner wants them "somewhat
+  realistic with identifiable features". `MAKELINE_LINEUP=seed` draws seven test people at the counter
+  (`--at 0,0.72,3.14159,0`). Portraits: `g3::portraitPrepare` (before BeginDrawing) and `g3::portrait`.

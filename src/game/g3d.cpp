@@ -17,28 +17,35 @@ out vec2 uv; out vec4 col; out vec3 nrm; out vec3 pos;
 void main() { uv = vertexTexCoord; col = vertexColor; nrm = vertexNormal; pos = vertexPosition; gl_Position = mvp * vec4(vertexPosition, 1.0); })";
 const char* FS = R"(#version 330
 in vec2 uv; in vec4 col; in vec3 nrm; in vec3 pos;
-uniform sampler2D texture0; uniform vec4 colDiffuse;
+uniform sampler2D texture0; uniform vec4 colDiffuse; uniform vec3 eye;
 out vec4 finalColor;
 void main() {
     vec4 base = texture(texture0, uv) * colDiffuse * col;
-    float l = 1.0;
+    vec3 c = base.rgb;
     if (dot(nrm, nrm) > 0.1) {
         vec3 n = normalize(nrm);
-        float sun = max(dot(n, normalize(vec3(0.35, 0.85, 0.4))), 0.0);
+        vec3 v = normalize(eye - pos);
+        if (dot(n, v) < 0.0) n = -n;                                  // thin shells are lit from whichever side you see
+        float key = max(dot(n, normalize(vec3(0.30, 0.80, 0.52))), 0.0);
+        float fill = max(dot(n, normalize(vec3(-0.6, 0.25, -0.5))), 0.0);
         float sky = 0.5 + 0.5 * n.y;
-        l = 0.50 + 0.38 * sun + 0.16 * sky;
+        vec3 light = vec3(0.50, 0.50, 0.54) * (0.78 + 0.22 * sky) + vec3(1.0, 0.95, 0.86) * key * 0.50 + vec3(0.60, 0.66, 0.80) * fill * 0.14;
+        float rim = pow(1.0 - max(dot(n, v), 0.0), 3.0);
+        c = base.rgb * light + vec3(1.0, 0.95, 0.88) * rim * 0.05 * (0.3 + base.rgb);
+        c = min(c, vec3(1.0));
     }
-    vec3 c = base.rgb * l;
-    c = mix(c, vec3(1.0, 0.93, 0.82) * dot(c, vec3(0.33)), 0.06);   // a warm wash
     finalColor = vec4(c, base.a);
 })";
+int eyeLoc = -1;
 const float D2R = 0.0174533f;
 void col(Color c) { rlColor4ub(c.r, c.g, c.b, c.a); }
 }  // namespace
 
-void init() { lit = LoadShaderFromMemory(VS, FS); }
+void init() { lit = LoadShaderFromMemory(VS, FS); eyeLoc = GetShaderLocation(lit, "eye"); }
 void begin(const Camera3D& cam) {
     BeginMode3D(cam);
+    float e[3] = {cam.position.x, cam.position.y, cam.position.z};
+    SetShaderValue(lit, eyeLoc, e, SHADER_UNIFORM_VEC3);
     BeginShaderMode(lit);
     rlDisableBackfaceCulling();
 }
@@ -130,6 +137,19 @@ void quadUp(Vector3 c, float w, float d, Color color) {
     float x = w / 2, z = d / 2;
     rlVertex3f(c.x - x, c.y, c.z - z); rlVertex3f(c.x - x, c.y, c.z + z); rlVertex3f(c.x + x, c.y, c.z + z);
     rlVertex3f(c.x - x, c.y, c.z - z); rlVertex3f(c.x + x, c.y, c.z + z); rlVertex3f(c.x + x, c.y, c.z - z);
+    rlEnd();
+}
+
+void softShadow(Vector3 c, float w, float d, float soft, unsigned char alpha) {
+    float x0 = c.x - w / 2, x1 = c.x + w / 2, z0 = c.z - d / 2, z1 = c.z + d / 2;
+    float X[4] = {x0 - soft, x0, x1, x1 + soft}, Z[4] = {z0 - soft, z0, z1, z1 + soft};
+    rlBegin(RL_TRIANGLES);
+    rlNormal3f(0, 0, 0);
+    auto v = [&](int i, int j) { bool in = (i == 1 || i == 2) && (j == 1 || j == 2); rlColor4ub(16, 12, 10, in ? alpha : 0); rlVertex3f(X[i], c.y, Z[j]); };
+    for (int i = 0; i < 3; i++) for (int j = 0; j < 3; j++) {
+        v(i, j); v(i, j + 1); v(i + 1, j + 1);
+        v(i, j); v(i + 1, j + 1); v(i + 1, j);
+    }
     rlEnd();
 }
 
@@ -268,73 +288,6 @@ void binFill(int ing, const Frame& f, float lx, float lz, float size) {
         topping(ing, i % 4, sc, 0);
         rlPopMatrix();
     }
-}
-
-void person(const Person& who, Vector3 feet, float yaw, float anger, float walk) {
-    uint32_t L = who.look;
-    static const Color SKIN[] = {{252, 226, 200, 255}, {242, 204, 170, 255}, {222, 174, 132, 255}, {188, 134, 96, 255}, {146, 100, 72, 255}, {100, 68, 50, 255}};
-    static const Color SHIRT[] = {{86, 134, 190, 255}, {92, 158, 92, 255}, {214, 120, 60, 255}, {150, 100, 170, 255}, {200, 80, 90, 255}, {90, 90, 100, 255}, {230, 200, 90, 255}, {70, 150, 150, 255}};
-    static const Color HAIR[] = {{84, 56, 38, 255}, {30, 26, 28, 255}, {206, 168, 96, 255}, {160, 76, 42, 255}, {150, 150, 152, 255}, {232, 232, 228, 255}};
-    static const Color PANTS[] = {{60, 70, 100, 255}, {70, 64, 58, 255}, {40, 44, 52, 255}, {120, 104, 80, 255}};
-    Color skin = ui::mix(SKIN[std::clamp(who.skin, 0, 5)], {226, 80, 60, 255}, std::max(0.f, anger) * 0.5f), shirt = SHIRT[(L >> 3) % 8], hair = HAIR[std::clamp(who.hair, 0, 5)], pants = PANTS[(L >> 16) % 4];
-    int style = who.hairStyle;
-    if (anger < 0) { shirt = {206, 60, 46, 255}; pants = {40, 40, 46, 255}; style = 4; anger = 0; }   // staff: the uniform and the visor
-    float wide = 1.0f + ((L >> 12) % 4) * 0.07f - who.sex * 0.08f, tall = 0.95f + ((L >> 18) % 5) * 0.025f - who.sex * 0.05f - (who.age > 65 ? 0.04f : 0);
-    float t = ui::time, swing = std::sin(walk * 9) * (walk > 0 ? 0.11f : 0), bob = walk > 0 ? std::fabs(std::sin(walk * 9)) * 0.025f : std::sin(t * (1.6f + anger * 3) + (L & 31)) * 0.006f;
-    float shake = anger > 0.6f ? std::sin(t * 24 + L) * 0.006f * anger : 0;
-    disc({feet.x, feet.y + 0.004f, feet.z}, 0.3f, {40, 30, 26, 70}, 14);   // a soft shadow
-    rlPushMatrix();
-    rlTranslatef(feet.x + shake, feet.y + bob, feet.z);
-    rlRotatef(yaw, 0, 1, 0);
-    rlScalef(1, tall, 1);
-    // legs and shoes
-    box({-0.09f, 0.4f, swing}, {0.13f, 0.8f, 0.15f}, pants);
-    box({0.09f, 0.4f, -swing}, {0.13f, 0.8f, 0.15f}, pants);
-    box({-0.09f, 0.04f, swing + 0.04f}, {0.14f, 0.08f, 0.25f}, {40, 34, 32, 255});
-    box({0.09f, 0.04f, -swing + 0.04f}, {0.14f, 0.08f, 0.25f}, {40, 34, 32, 255});
-    // body
-    cyl({0, 0.78f, 0}, 0.2f * wide, 0.6f, shirt, 10, 0.17f * wide);
-    ball({0, 1.36f, 0}, 0.19f * wide, shirt, 0.5f);
-    // arms: at the sides, or folded when they've had enough
-    if (anger > 0.5f) {
-        box({0, 1.12f, 0.17f * wide}, {0.4f * wide, 0.09f, 0.1f}, ui::shade(shirt, 0.86f));
-        box({0.06f, 1.18f, 0.2f * wide}, {0.3f * wide, 0.08f, 0.08f}, skin);
-    } else {
-        box({-0.25f * wide, 1.05f, -swing * 0.8f}, {0.09f, 0.55f, 0.1f}, ui::shade(shirt, 0.9f));
-        box({0.25f * wide, 1.05f, swing * 0.8f}, {0.09f, 0.55f, 0.1f}, ui::shade(shirt, 0.9f));
-        box({-0.25f * wide, 0.74f, -swing * 0.8f}, {0.08f, 0.1f, 0.09f}, skin);
-        box({0.25f * wide, 0.74f, swing * 0.8f}, {0.08f, 0.1f, 0.09f}, skin);
-    }
-    cyl({0, 1.4f, 0}, 0.06f, 0.08f, ui::shade(skin, 0.9f), 8);
-    // head
-    float hy = 1.6f, hr = 0.14f;
-    ball({0, hy, 0}, hr, skin, 1.08f);
-    if (style == 1 || style == 2 || style == 3) ball({0, hy + 0.03f, -0.015f}, hr * 1.06f, hair, 0.95f);
-    if (style == 2) ball({0, hy + 0.17f, -0.04f}, 0.06f, hair);
-    if (style == 3) box({0, hy - 0.08f, -0.09f}, {0.3f, 0.3f, 0.1f}, hair);
-    if (style == 0) ring({0, hy + 0.06f, 0}, hr * 0.9f, hr * 1.04f, hair, 180, 360, 8);
-    if (style == 4) { ball({0, hy + 0.05f, 0}, hr * 1.05f, ui::shade(shirt, 0.7f), 0.8f); box({0, hy + 0.06f, 0.14f}, {0.2f, 0.02f, 0.14f}, ui::shade(shirt, 0.55f)); }
-    if (style == 1 || style == 2 || style == 3) ball({0, hy - 0.005f, 0.035f}, hr * 0.99f, skin, 1.0f);   // the face shows through the hair
-    // the face: eyes, brows that come down as they get angrier, a mouth that turns
-    float fz = hr * 0.96f;
-    Color ink{40, 28, 24, 255};
-    box({-0.05f, hy + 0.01f, fz}, {0.026f, 0.03f, 0.02f}, ink);
-    box({0.05f, hy + 0.01f, fz}, {0.026f, 0.03f, 0.02f}, ink);
-    for (int side = -1; side <= 1; side += 2) {
-        rlPushMatrix();
-        rlTranslatef(side * 0.05f, hy + 0.05f - anger * 0.012f, fz + 0.004f);
-        rlRotatef(side * anger * 28, 0, 0, 1);
-        box({0, 0, 0}, {0.06f, 0.014f, 0.016f}, ink);
-        rlPopMatrix();
-    }
-    if (anger > 0.8f) box({0, hy - 0.065f, fz - 0.006f}, {0.06f, 0.045f, 0.02f}, ink);
-    else box({0, hy - 0.06f, fz - 0.004f}, {0.05f + anger * 0.02f, 0.012f, 0.02f}, ink);
-    if ((L >> 14) & 1) {   // glasses
-        box({0, hy + 0.012f, fz + 0.012f}, {0.2f, 0.008f, 0.008f}, ink);
-        box({-0.05f, hy + 0.01f, fz + 0.012f}, {0.06f, 0.05f, 0.004f}, {200, 220, 236, 120});
-        box({0.05f, hy + 0.01f, fz + 0.012f}, {0.06f, 0.05f, 0.004f}, {200, 220, 236, 120});
-    }
-    rlPopMatrix();
 }
 
 void pizzaBox(Vector3 b, float yaw, bool open) {

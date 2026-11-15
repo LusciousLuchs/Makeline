@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 
 using namespace pz;
 using ui::INK;
@@ -212,8 +213,17 @@ void room() {
     box({5.15f, 1.5f, -3}, {0.1f, 3, 6.4f}, wall);
     box({0, 1.5f, -6.15f}, {10.4f, 3, 0.1f}, wall);
     box({0, 2.72f, -6.08f}, {10.3f, 0.5f, 0.06f}, {206, 60, 46, 255});
-    box({0, 3.02f, 0}, {10.4f, 0.04f, 12.4f}, {244, 238, 226, 255});
-    for (int i = 0; i < 3; i++) for (int j = 0; j < 4; j++) box({-3.2f + i * 3.2f, 2.99f, -4.5f + j * 3.0f}, {1.2f, 0.03f, 0.5f}, {255, 255, 244, 255});
+    rlBegin(RL_TRIANGLES);   // the ceiling, evenly lit
+    rlNormal3f(0, 0, 0); rlColor4ub(226, 220, 208, 255);
+    rlVertex3f(-5.2f, 3, -6.2f); rlVertex3f(5.2f, 3, -6.2f); rlVertex3f(5.2f, 3, 6.2f);
+    rlVertex3f(-5.2f, 3, -6.2f); rlVertex3f(5.2f, 3, 6.2f); rlVertex3f(-5.2f, 3, 6.2f);
+    rlColor4ub(255, 255, 246, 255);
+    for (int i = 0; i < 3; i++) for (int j = 0; j < 4; j++) {
+        float x = -3.2f + i * 3.2f, z = -4.5f + j * 3.0f;
+        rlVertex3f(x - 0.6f, 2.995f, z - 0.25f); rlVertex3f(x + 0.6f, 2.995f, z - 0.25f); rlVertex3f(x + 0.6f, 2.995f, z + 0.25f);
+        rlVertex3f(x - 0.6f, 2.995f, z - 0.25f); rlVertex3f(x + 0.6f, 2.995f, z + 0.25f); rlVertex3f(x - 0.6f, 2.995f, z + 0.25f);
+    }
+    rlEnd();
     // the front: windows onto the street and the door
     float dusk = std::clamp((float)(S.t / SHIFT_LEN), 0.f, 1.f);
     Color sky = ui::mix({150, 204, 240, 255}, {60, 50, 100, 255}, dusk), low = ui::mix({250, 220, 160, 255}, {236, 120, 80, 255}, dusk);
@@ -237,6 +247,31 @@ void room() {
     box({-4.6f, 0.2f, -3.8f}, {0.4f, 0.4f, 0.08f}, {134, 88, 56, 255});
     g3::cyl({4.5f, 0, -1.2f}, 0.22f, 0.45f, {170, 96, 70, 255}, 10, 0.28f);
     g3::ball({4.5f, 0.8f, -1.2f}, 0.38f, {70, 140, 80, 255}, 1.2f);
+    // dark where things meet the floor
+    g3::softShadow({0, 0.003f, 0}, 10.2f, 0.62f, 0.5f, 110);
+    g3::softShadow({-4.6f, 0.003f, 2.9f}, 0.98f, 3.5f, 0.45f, 110);
+    g3::softShadow({-0.7f, 0.003f, 5.4f}, 3.8f, 1.0f, 0.5f, 120);
+    g3::softShadow({3.3f, 0.003f, 5.45f}, 1.9f, 0.95f, 0.45f, 110);
+    g3::softShadow({4.75f, 0.003f, 2.3f}, 0.56f, 2.44f, 0.4f, 90);
+    g3::softShadow({-4.6f, 0.003f, -4.6f}, 0.5f, 2.0f, 0.3f, 90);
+    for (float z : {-6.1f, 6.1f}) g3::softShadow({0, 0.003f, z}, 10.4f, 0.1f, 0.6f, 70);
+    for (float x : {-5.1f, 5.1f}) g3::softShadow({x, 0.003f, 0}, 0.1f, 12.4f, 0.6f, 70);
+    // the lobby: a drinks fridge, a table and chairs, a bin, a mat at the door
+    box({4.6f, 0.95f, -3.4f}, {0.7f, 1.9f, 0.8f}, {70, 74, 84, 255});
+    box({4.24f, 1.05f, -3.4f}, {0.02f, 1.5f, 0.66f}, {170, 210, 230, 255});
+    for (int r = 0; r < 4; r++) for (int c = 0; c < 4; c++) g3::cyl({4.3f, 0.36f + r * 0.38f, -3.66f + c * 0.17f}, 0.035f, 0.14f, (r + c) % 3 == 0 ? Color{206, 60, 46, 255} : (r + c) % 3 == 1 ? Color{60, 120, 190, 255} : Color{240, 190, 60, 255}, 8);
+    g3::softShadow({4.6f, 0.003f, -3.4f}, 0.7f, 0.8f, 0.35f, 110);
+    g3::cyl({-2.6f, 0, -4.4f}, 0.06f, 0.72f, {90, 92, 100, 255}, 8);
+    g3::cyl({-2.6f, 0.72f, -4.4f}, 0.5f, 0.04f, {206, 60, 46, 255}, 20);
+    g3::softShadow({-2.6f, 0.003f, -4.4f}, 0.7f, 0.7f, 0.35f, 80);
+    for (int i = 0; i < 2; i++) { float x = -3.3f + i * 1.4f; box({x, 0.44f, -4.4f}, {0.4f, 0.05f, 0.4f}, {230, 224, 210, 255}); box({x + (i ? 0.19f : -0.19f), 0.68f, -4.4f}, {0.04f, 0.5f, 0.4f}, {230, 224, 210, 255}); for (float dx : {-0.17f, 0.17f}) for (float dz : {-0.17f, 0.17f}) box({x + dx, 0.21f, -4.4f + dz}, {0.03f, 0.42f, 0.03f}, {90, 92, 100, 255}); }
+    g3::cyl({2.4f, 0, -5.6f}, 0.2f, 0.7f, {84, 88, 96, 255}, 12, 0.23f);
+    box({DOOR.x, 0.006f, -5.4f}, {1.4f, 0.012f, 0.8f}, {60, 54, 50, 255});
+    for (float x = -4.4f; x < 5; x += 2.2f) box({x, 0.06f, -6.08f}, {2.2f, 0.12f, 0.04f}, {120, 84, 60, 255});   // skirting
+    // the kitchen: tiled walls to shoulder height
+    box({0, 0.75f, 6.09f}, {10.3f, 1.5f, 0.02f}, {236, 238, 236, 255});
+    for (float x = -5; x <= 5; x += 0.5f) box({x, 0.75f, 6.075f}, {0.012f, 1.5f, 0.012f}, {200, 204, 204, 255});
+    for (float y = 0.5f; y < 1.6f; y += 0.5f) box({0, y, 6.075f}, {10.3f, 0.012f, 0.012f}, {200, 204, 204, 255});
     // the counter, with the register and the phone on it
     box({0, 0.5f, 0}, {10.2f, 1.0f, 0.62f}, {176, 120, 76, 255});
     box({0, 1.02f, 0}, {10.2f, 0.05f, 0.74f}, {232, 226, 214, 255});
@@ -362,6 +397,10 @@ void worldDraw() {
     for (auto& v : G.people) if (Customer* c = S.cust(v.id)) {
         float anger = c->state == C_DONE ? (c->leftStars >= 4 ? 0.0f : c->leftStars == 3 ? 0.4f : 1.0f) : 1 - c->patience;
         g3::person(c->who, {v.x, 0, v.z}, v.yaw, anger, v.walk);
+    }
+    if (getenv("MAKELINE_LINEUP")) {   // (screenshots) a row of different people, calm to furious, to check faces
+        Rng r(atoi(getenv("MAKELINE_LINEUP")));
+        for (int i = 0; i < 7; i++) { Person p = makePerson(r); g3::person(p, {-1.65f + i * 0.55f, 0, -0.75f}, 0, i == 6 ? -1.f : i / 6.f, 0); }
     }
     // the crew, in uniform, where they work
     int nc = 0, nk = 0, nd = 0;
