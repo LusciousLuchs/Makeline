@@ -20,7 +20,9 @@ up to date when the owner adds to it. "Makeline" is a working title.
 - Portions per size; too little or too much makes customers angry.
 - The store's review score under 3.0 at closing is a reprimand; 3 reprimands inside 7 days and you're fired.
 - Staff can be hired, make mistakes, can be written up, and quit when unhappy (drivers with no tips, customer
-  service that gets yelled at). People vary in age, sex, ethnic background, names and looks.
+  service that gets yelled at). A write-up or a talking-to can improve them or make them worse; doing it back to
+  back can make them quit, which can bring an HR complaint about you, which can bring a reprimand from upper
+  management (in DESIGN.md; not built yet). People vary in age, sex, ethnic background, names and looks.
 - Deliveries: up to 10 miles, time from the route and its speed limits, extra time per stop, a road map generated
   for the shift.
 - 3D, not 2D. raylib and OpenGL. Its own GitHub repository, self-updating.

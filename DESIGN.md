@@ -24,6 +24,7 @@ It's built from five years on a real makeline: the point is that it feels right 
 
 ### Being fired (the lose condition)
 
+- You get reprimanded two ways: for the store's score, and for how you treat your staff (see Staff: HR complaints).
 - At closing each day, corporate looks at the **store's review score** (the average of the last 30 reviews).
 - Below the threshold (**3.0 stars**, to be tuned), you get a **reprimand**.
 - **Three reprimands inside any 7 days and you're fired.** Game over: the save is closed out and you start again
@@ -113,8 +114,19 @@ You're the manager: you can do every job yourself, or hire people to do them.
   skill you only get a hint of at the interview. Good people cost more.
 - **Staff make mistakes**, by skill: orders rung up wrong, portions off, a topping forgotten, a sloppy cut. Their
   mistakes land on the store's score like yours do, and the day's report names who did what.
-- **Write-ups:** you can write someone up. They're more careful for a couple of days and less happy for longer.
-  Writing someone up who did nothing wrong costs twice the goodwill.
+- **Talking to them and writing them up.** Two things you can do when someone messes up (or when they haven't):
+  - **Talk to them** about what they're doing: the light option. A small nudge, a small cost.
+  - **Write them up:** the heavy option. It goes in their file.
+  - Neither is a sure thing. It can **improve their behaviour** (more careful for a few days), or they can
+    **do worse**: resentful, sloppier, slower. Which way it goes depends on the person, how happy they already
+    are, whether they actually did something wrong, and how often you've been on them lately.
+  - Deserved and rare works best. Undeserved, or the third time this week, mostly backfires.
+- **Being hounded out.** Talks and write-ups back to back wear a person down faster than anything else. Push
+  someone far enough and they quit on the spot.
+- **HR complaints.** Someone who quits after you've been on their case may file a **complaint about you** with HR.
+  The more you piled on, and the less of it was deserved, the more likely the complaint.
+- **Upper management.** An HR complaint lands on the regional office's desk, and they can **reprimand you** for it.
+  It's the same kind of reprimand as a bad review score: it counts toward the three that get you fired.
 - **Happiness:** unhappy staff do worse work, and anyone miserable at closing quits.
   - Drivers who make no tips get unhappy. Tips come from on-time, correct deliveries.
   - Customer service hate being yelled at: every rude or fed-up customer they serve wears them down.
@@ -178,3 +190,7 @@ Every finished or failed order is judged against what the customer **actually** 
    And the count: built as "3 reprimands within 7 days". If you meant three days in a row only, say so.
 2. Fired means the save starts over at a new store. Or should it be a hard game over?
 3. The name. "Makeline" is a placeholder.
+4. HR reprimands: written here as counting toward the same three-in-seven-days that gets you fired. Or should
+   they be a separate count?
+5. Should a complaint always mean a reprimand, or should upper management sometimes side with you when the
+   write-ups were deserved?
